@@ -24,9 +24,15 @@ router.post("/verify-otp", verifyOtp);
 // Profile
 router.get("/profile", authMiddleware, getProfile);
 
-// Dashboard
+// Dashboard (for all logged-in users)
 router.get("/dashboard", authMiddleware, (req, res) => {
   res.json({ message: `Welcome ${req.user.email}, you are logged in!` });
 });
+
+// ✅ Admin-only route
+router.get("/admin-dashboard", authMiddleware, authMiddleware.requireAdmin, (req, res) => {
+  res.json({ message: "Welcome, Admin!" });
+});
+
 
 module.exports = router;
