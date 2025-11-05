@@ -2,8 +2,7 @@ const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const Vehicle = require("../models/Vehicle");
-const User = require("../models/User");
-const upload = require("../middleware/upload"); //  Import multer middleware
+const upload = require("../middleware/upload"); // multer middleware
 
 // =============================
 //  POST /api/vehicles/register
@@ -11,41 +10,69 @@ const upload = require("../middleware/upload"); //  Import multer middleware
 router.post(
   "/register",
   authMiddleware,
-upload.fields([
-  { name: "profileImages", maxCount: 4 }, // allow multiple images
-  { name: "documents", maxCount: 5 },
-]),
-
+  upload.fields([
+    { name: "driverImages", maxCount: 3 }, // multiple driver images
+    { name: "documents", maxCount: 5 },
+    { name: "profileImages", maxCount: 5 },
+  ]),
   async (req, res) => {
     try {
-      console.log(" Vehicle Register API Hit!");
-      console.log(" req.body:", req.body);
-      console.log(" req.files:", req.files);
-      console.log(" req.user:", req.user);
+      console.log("✅ Vehicle Register API Hit!");
+      console.log("📩 req.body:", req.body);
+      console.log("🖼️ req.files:", req.files);
 
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ message: "User authentication failed" });
       }
 
-      const { phone, plateNumber, vehicleType, brand, model, color } = req.body;
+      const {
+        phone,
+        plateNumber,
+        vehicleType,
+        brand,
+        model,
+        color,
+        driverNames,
+        cnics,
+        driverPhones,
+      } = req.body;
 
+      // ✅ Prevent duplicate plate number
       const existingVehicle = await Vehicle.findOne({ plateNumber });
       if (existingVehicle) {
-        return res
-          .status(400)
-          .json({ message: "Vehicle with this plate number already exists." });
+        return res.status(400).json({
+          message: "Vehicle with this plate number already exists.",
+        });
       }
 
-      const profileImages = req.files?.profileImages
-      ? req.files.profileImages.map((file) => file.path)
-      : [];
+      // ✅ Safely extract uploaded files
+      const documents = req.files?.documents?.map((f) => f.path) || [];
+      const profileImages = req.files?.profileImages?.map((f) => f.path) || [];
+      const driverImages = req.files?.driverImages?.map((f) => f.path) || [];
 
-
-      const documents = req.files?.documents
-        ? req.files.documents.map((file) => file.path)
+      // ✅ Ensure arrays (so it doesn’t break when one driver only)
+      const driverNamesArr = Array.isArray(driverNames)
+        ? driverNames
+        : driverNames
+        ? [driverNames]
+        : [];
+      const cnicsArr = Array.isArray(cnics) ? cnics : cnics ? [cnics] : [];
+      const driverPhonesArr = Array.isArray(driverPhones)
+        ? driverPhones
+        : driverPhones
+        ? [driverPhones]
         : [];
 
+      // ✅ Map driver details correctly
+      const drivers = driverNamesArr.map((name, index) => ({
+        name: name || "",
+        cnic: cnicsArr[index] || "",
+        phone: driverPhonesArr[index] || "",
+        image: driverImages[index] || "", // ✅ store driver image path (for Logs display)
+      }));
+
+      // ✅ Create new vehicle entry
       const newVehicle = new Vehicle({
         user: userId,
         phone,
@@ -54,6 +81,7 @@ upload.fields([
         brand,
         model,
         color,
+        drivers, // structured driver array
         profileImages,
         documents,
         status: "Pending",
@@ -61,18 +89,19 @@ upload.fields([
 
       await newVehicle.save();
 
-      res.status(201).json({ message: "Vehicle registered successfully!" });
+      res.status(201).json({
+        message: "✅ Vehicle registered successfully with multiple drivers!",
+        vehicle: newVehicle,
+      });
     } catch (err) {
-      console.error(" Vehicle register error:", err);
+      console.error("❌ Vehicle register error:", err);
       res.status(500).json({
         message: "Error registering vehicle",
         error: err.message,
-        stack: err.stack,
       });
     }
   }
 );
-
 
 // =============================
 //  GET /api/vehicles/admin
@@ -94,7 +123,7 @@ router.get("/admin", authMiddleware, async (req, res) => {
 
     res.json(vehiclesWithOwner);
   } catch (err) {
-    console.error(" Fetch vehicles error:", err);
+    console.error("❌ Fetch vehicles error:", err);
     res.status(500).json({ message: "Error fetching vehicles" });
   }
 });
@@ -109,6 +138,7 @@ router.put("/:id/status", authMiddleware, async (req, res) => {
     }
 
     const { status } = req.body;
+
     const vehicle = await Vehicle.findByIdAndUpdate(
       req.params.id,
       { status },
@@ -121,7 +151,7 @@ router.put("/:id/status", authMiddleware, async (req, res) => {
 
     res.json({ message: "Vehicle status updated successfully", vehicle });
   } catch (err) {
-    console.error(" Update status error:", err);
+    console.error("❌ Update status error:", err);
     res.status(500).json({
       message: "Error updating vehicle status",
       error: err.message,
@@ -134,20 +164,21 @@ router.put("/:id/status", authMiddleware, async (req, res) => {
 // =============================
 router.get("/my-vehicles", authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id; //  From authMiddleware
+    const userId = req.user.id;
     console.log("🔍 Fetching vehicles for user:", userId);
 
-    const vehicles = await Vehicle.find({ user: userId }).sort({ createdAt: -1 });
+    const vehicles = await Vehicle.find({ user: userId }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       count: vehicles.length,
       vehicles,
     });
   } catch (err) {
-    console.error(" Error fetching user's vehicles:", err);
+    console.error("❌ Error fetching user's vehicles:", err);
     res.status(500).json({ message: "Failed to fetch vehicles" });
   }
 });
-
 
 module.exports = router;

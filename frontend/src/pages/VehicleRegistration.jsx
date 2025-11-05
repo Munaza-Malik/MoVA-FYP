@@ -16,15 +16,25 @@ export default function VehicleRegistration() {
     brand: "",
     model: "",
     color: "",
-    profileImages: [],
+    driverImages: [null, null, null],
     documents: [],
   });
 
   const [errors, setErrors] = useState({});
   const [isDragging, setIsDragging] = useState(false);
-  // const [imagePreview, setImagePreview] = useState(null);
-  const [imagePreviews, setImagePreviews] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState(["", "", ""]);
+  const [driverDetails, setDriverDetails] = useState([
+    { name: "", cnic: "", phone: "" },
+    { name: "", cnic: "", phone: "" },
+    { name: "", cnic: "", phone: "" },
+  ]);
+  const [driverErrors, setDriverErrors] = useState([
+    { name: "", cnic: "", phone: "" },
+    { name: "", cnic: "", phone: "" },
+    { name: "", cnic: "", phone: "" },
+  ]);
 
+  // Fetch profile
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -52,6 +62,7 @@ export default function VehicleRegistration() {
     fetchProfile();
   }, []);
 
+  // Handle input change
   const handleChange = (e) => {
     const { name, value, files } = e.target;
 
@@ -60,97 +71,174 @@ export default function VehicleRegistration() {
         ...prev,
         documents: [...prev.documents, ...Array.from(files)],
       }));
-} else if (name === "profileImages") {
-  const selectedFiles = Array.from(files);
-  setFormData((prev) => ({
-    ...prev,
-    profileImages: [...prev.profileImages, ...selectedFiles],
-  }));
-  setImagePreviews((prev) => [
-    ...prev,
-    ...selectedFiles.map((file) => URL.createObjectURL(file)),
-  ]);
-}
- else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
 
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  // 🔹 Handle Form Submission
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  // Handle driver image change
+  const handleDriverImageChange = (index, file) => {
+    const newImages = [...formData.driverImages];
+    const newPreviews = [...imagePreviews];
+    newImages[index] = file;
+    newPreviews[index] = URL.createObjectURL(file);
+    setFormData((prev) => ({ ...prev, driverImages: newImages }));
+    setImagePreviews(newPreviews);
+  };
 
-  let newErrors = {};
+  // Handle driver detail change
+  const handleDriverDetailChange = (index, field, value) => {
+    const updated = [...driverDetails];
+    updated[index][field] = value;
+    setDriverDetails(updated);
+
+    const newErrors = [...driverErrors];
+    newErrors[index][field] = "";
+    setDriverErrors(newErrors);
+  };
+
+  // Validation helpers
   const phoneRegex = /^(\+92|0)?3\d{9}$/;
   const plateRegex = /^[A-Z]{2,3}-\d{3,4}$/;
+  const cnicRegex = /^\d{5}-\d{7}-\d{1}$/;
 
-  if (!phoneRegex.test(formData.phone)) {
-    newErrors.phone = "Invalid Pakistani phone number.";
-  }
-  if (!plateRegex.test(formData.plateNumber)) {
-    newErrors.plateNumber = "Invalid plate number format (e.g., ABC-123).";
-  }
-  if (formData.documents.length === 0) {
-    newErrors.documents = "Please upload your vehicle documents.";
-  }
-  if (formData.profileImages.length === 0) {
-    newErrors.profileImages = "Please upload at least one image.";
-  }
+  // Handle submit
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  setErrors(newErrors);
-  if (Object.keys(newErrors).length > 0) return;
+    let newErrors = {};
+    let newDriverErrors = driverErrors.map(() => ({
+      name: "",
+      cnic: "",
+      phone: "",
+    }));
 
-  try {
-    const data = new FormData();
-    data.append("phone", formData.phone);
-    data.append("plateNumber", formData.plateNumber);
-    data.append("vehicleType", formData.vehicleType);
-    data.append("brand", formData.brand);
-    data.append("model", formData.model);
-    data.append("color", formData.color);
-    formData.profileImages.forEach((file) => data.append("profileImages", file));
-    formData.documents.forEach((file) => data.append("documents", file));
+    // --- Required field checks ---
+    if (!formData.phone.trim()) {
+      newErrors.phone = "This field is required";
+    } else if (!phoneRegex.test(formData.phone)) {
+      newErrors.phone = "Invalid format";
+    }
 
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (!formData.plateNumber.trim()) {
+      newErrors.plateNumber = "This field is required";
+    } else if (!plateRegex.test(formData.plateNumber)) {
+      newErrors.plateNumber = "Invalid format";
+    }
 
-    // ✅ POST request to backend to actually register vehicle
-    const response = await axios.post(
-      "http://localhost:5000/api/vehicles/register",
-      data,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    if (!formData.vehicleType.trim()) {
+      newErrors.vehicleType = "This field is required";
+    }
 
-    console.log("Vehicle Registered Successfully:", response.data);
-    navigate("/user-dashboard");
-  } catch (error) {
-    console.error("Upload error:", error);
+const uploadedDrivers = driverDetails.filter(d => d.name.trim() !== "");
 
-    if (
-      error.response &&
-      error.response.data.message?.includes("plate number")
-    ) {
-      setErrors({ plateNumber: error.response.data.message });
-    } else if (error.response && error.response.data.message) {
-      setErrors({ submit: error.response.data.message });
-    } else {
-      setErrors({
-        submit: "Error registering vehicle. Please try again.",
-      });
+// Validate minimum 1 driver
+if (uploadedDrivers.length === 0) {
+  newErrors.driverImages = "At least one driver is required.";
+}
+
+// Validate maximum 3 drivers
+if (uploadedDrivers.length > 3) {
+  newErrors.driverImages = "Maximum 3 drivers allowed.";
+}
+
+
+    if (formData.documents.length === 0) {
+      newErrors.documents = "Please upload your vehicle documents.";
+    }
+
+// --- Driver detail validations ---
+const filledDrivers = driverDetails.filter(driver => driver.name.trim() !== "");
+
+// Check at least one driver
+if (filledDrivers.length === 0) {
+  newErrors.driverImages = "At least one driver is required.";
+}
+
+// Validate only filled drivers
+filledDrivers.forEach((driver) => {
+  const index = driverDetails.indexOf(driver); // original index
+  if (driver.cnic && !cnicRegex.test(driver.cnic)) newDriverErrors[index].cnic = "Invalid CNIC";
+  if (driver.phone && !phoneRegex.test(driver.phone)) newDriverErrors[index].phone = "Invalid phone number";
+});
+
+
+
+setErrors(newErrors);
+setDriverErrors(newDriverErrors);
+
+const hasDriverErrors = newDriverErrors.some(
+  (err) => err.name || err.cnic || err.phone
+);
+
+if (Object.keys(newErrors).length > 0 || hasDriverErrors) return;
+
+try {
+  const data = new FormData();
+  data.append("phone", formData.phone);
+  data.append("plateNumber", formData.plateNumber);
+  data.append("vehicleType", formData.vehicleType);
+  data.append("brand", formData.brand);
+  data.append("model", formData.model);
+  data.append("color", formData.color);
+
+// Append driver images & details
+driverDetails.forEach((driver, index) => {
+  if (driver.name.trim() !== "") { // only include filled drivers
+    data.append("driverNames", driver.name);
+    data.append("cnics", driver.cnic || "");
+    data.append("driverPhones", driver.phone || "");
+
+    if (formData.driverImages[index]) {
+      data.append("driverImages", formData.driverImages[index]);
     }
   }
-};
+});
 
+
+
+
+
+  // Append documents
+  formData.documents.forEach((file) => data.append("documents", file));
+
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+
+  const response = await axios.post(
+    "http://localhost:5000/api/vehicles/register",
+    data,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  console.log("Vehicle Registered Successfully:", response.data);
+  navigate("/user-dashboard");
+} catch (error) {
+  console.error("Upload error:", error);
+
+
+
+  if (
+    error.response &&
+    error.response.data.message?.includes("plate number")
+  ) {
+    setErrors({ plateNumber: error.response.data.message });
+  } else if (error.response && error.response.data.message) {
+    setErrors({ submit: error.response.data.message });
+  } else {
+    setErrors({
+      submit: "Error registering vehicle. Please try again.",
+    });
+  }
+}
+  }
 
   return (
     <div className="min-h-screen flex justify-center items-center bg-[#f6f8f5] p-8">
@@ -166,53 +254,127 @@ const handleSubmit = async (e) => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Upload Image Section */}
-<div>
-  <h2 className="text-lg font-bold text-[#A6C76C] mb-4">
-    Upload Driver / Driver's Images
-  </h2>
+          {/* Driver Images */}
+          <div>
+            <h2 className="text-lg font-bold text-[#A6C76C] mb-4 text-center">
+              Upload Driver / Drivers' Images
+            </h2>
 
-  <div className="flex flex-wrap gap-4 justify-center">
-    {imagePreviews.length > 0 ? (
-      imagePreviews.map((src, index) => (
-        <img
-          key={index}
-          src={src}
-          alt={`Vehicle Preview ${index}`}
-          className="w-32 h-32 rounded-lg object-cover border-4 border-[#A6C76C] shadow-md"
-        />
-      ))
-    ) : (
-      <div className="w-32 h-32 rounded-lg bg-gray-100 border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500">
-        No Images
-      </div>
-    )}
-  </div>
+            <div className="flex justify-center gap-6 flex-wrap">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className="flex flex-col items-center">
+                  <label
+                    htmlFor={`driverImage${index}`}
+                    className="w-28 h-28 rounded-full border-4 border-[#A6C76C] flex items-center justify-center bg-gray-100 cursor-pointer hover:scale-105 transition-all shadow-md"
+                  >
+                    {imagePreviews[index] ? (
+                      <img
+                        src={imagePreviews[index]}
+                        alt={`Driver ${index + 1}`}
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-10 w-10 text-gray-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                    )}
+                    <input
+                      id={`driverImage${index}`}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) =>
+                        e.target.files[0] &&
+                        handleDriverImageChange(index, e.target.files[0])
+                      }
+                    />
+                  </label>
 
-  <input
-    type="file"
-    name="profileImages"
-    accept=".png,.jpg,.jpeg"
-    multiple
-    onChange={handleChange}
-    className="hidden"
-    id="profileUpload"
-  />
+                  <p className="text-sm text-gray-600 mt-2">
+                    Driver {index + 1}
+                  </p>
 
-  <label
-    htmlFor="profileUpload"
-    className="cursor-pointer bg-[#A6C76C] hover:bg-[#96b963] text-white px-5 py-2 mt-3 rounded-full font-semibold shadow-md transition-all duration-300 block text-center w-fit mx-auto"
-  >
-    Choose Images
-  </label>
+                  {imagePreviews[index] && (
+                    <div className="mt-3 space-y-2 w-40">
+                      <input
+                        type="text"
+                        placeholder="Driver Name"
+                        value={driverDetails[index].name}
+                        onChange={(e) =>
+                          handleDriverDetailChange(
+                            index,
+                            "name",
+                            e.target.value
+                          )
+                        }
+                        className="border rounded-md p-2 w-full text-sm focus:ring-2 focus:ring-[#A6C76C] outline-none"
+                      />
+                      {driverErrors[index].name && (
+                        <p className="text-red-500 text-xs">
+                          {driverErrors[index].name}
+                        </p>
+                      )}
 
-  {errors.profileImages && (
-    <p className="text-red-500 text-sm text-center mt-2">
-      {errors.profileImages}
-    </p>
-  )}
-</div>
+                      <input
+                        type="text"
+                        placeholder="CNIC (e.g. 35202-1234567-1)"
+                        value={driverDetails[index].cnic}
+                        onChange={(e) =>
+                          handleDriverDetailChange(
+                            index,
+                            "cnic",
+                            e.target.value
+                          )
+                        }
+                        className="border rounded-md p-2 w-full text-sm focus:ring-2 focus:ring-[#A6C76C] outline-none"
+                      />
+                      {driverErrors[index].cnic && (
+                        <p className="text-red-500 text-xs">
+                          {driverErrors[index].cnic}
+                        </p>
+                      )}
 
+                      <input
+                        type="text"
+                        placeholder="Driver Phone"
+                        value={driverDetails[index].phone}
+                        onChange={(e) =>
+                          handleDriverDetailChange(
+                            index,
+                            "phone",
+                            e.target.value
+                          )
+                        }
+                        className="border rounded-md p-2 w-full text-sm focus:ring-2 focus:ring-[#A6C76C] outline-none"
+                      />
+                      {driverErrors[index].phone && (
+                        <p className="text-red-500 text-xs">
+                          {driverErrors[index].phone}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {errors.driverImages && (
+              <p className="text-red-500 text-sm text-center mt-3">
+                {errors.driverImages}
+              </p>
+            )}
+          </div>
 
           {/* User Details */}
           <div>
@@ -472,7 +634,7 @@ const handleSubmit = async (e) => {
                   brand: "",
                   model: "",
                   color: "",
-                  profileImages: [],
+                  driverImages: [null, null, null],
                   documents: [],
                 })
               }
