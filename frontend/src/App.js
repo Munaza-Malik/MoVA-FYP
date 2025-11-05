@@ -21,7 +21,6 @@ import ManageUsers from "./pages/admin/ManageUsers";
 import ManageVehicles from "./pages/admin/ManageVehicles";
 import LogsReports from "./pages/admin/LogsReports";
 import Alerts from "./pages/admin/Alerts";
-import Settings from "./pages/admin/Settings";
 import LiveMonitoring from "./pages/admin/LiveMonitoring";
 import AdminProfile from "./pages/admin/AdminProfile";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -65,7 +64,6 @@ function App() {
           <Route path="manage-vehicles" element={<ManageVehicles />} />
           <Route path="logs-reports" element={<LogsReports />} />
           <Route path="alerts" element={<Alerts />} />
-          <Route path="settings" element={<Settings />} />
           <Route path="profile" element={<AdminProfile />} />
         </Route>
       </Routes>

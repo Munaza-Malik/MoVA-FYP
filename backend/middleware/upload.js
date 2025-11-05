@@ -1,40 +1,46 @@
+// backend/middleware/upload.js
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-//  Ensure uploads folder exists
+// Ensure uploads folder exists
 const uploadDir = "uploads";
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-//  Storage configuration
+// Storage configuration
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const uniqueName = Date.now() + "-" + file.originalname;
     cb(null, uniqueName);
   },
 });
 
-//  File filter (supports both profileImage & documents)
-//  File filter (supports vehicle images)
+// File filter (supports vehicle images and documents)
 const fileFilter = (req, file, cb) => {
   const allowed = /jpeg|jpg|png|pdf|doc|docx/;
   const ext = path.extname(file.originalname).toLowerCase();
 
   if (!allowed.test(ext)) {
     return cb(
-      new Error("Only images (jpg, png) and documents (pdf, doc, docx) are allowed"),
+      new Error(
+        "Only images (jpg, png) and documents (pdf, doc, docx) are allowed"
+      ),
       false
     );
   }
 
-  //  Allow all valid vehicle-related fields
-  const validFields = ["profileImages", "documents", "cnicImage", "vehicleImage"];
-
+  // Allow all valid vehicle-related fields
+  const validFields = [
+    "profileImage", // for Signup.jsx
+    "profileImages", // for VehicleRegistration.jsx
+    "documents",
+    "cnicImage",
+    "vehicleImage",
+    "driverImages",
+  ];
 
   if (validFields.includes(file.fieldname)) {
     cb(null, true);
@@ -43,6 +49,5 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-
-//  Export multer instance
+// Export multer instance
 module.exports = multer({ storage, fileFilter });

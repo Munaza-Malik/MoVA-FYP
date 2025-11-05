@@ -27,7 +27,6 @@ export default function AdminSidebar() {
     { icon: <FaCar />, label: "Manage Vehicles", link: "/admin/manage-vehicles" },
     { icon: <FaFileAlt />, label: "Logs & Reports", link: "/admin/logs-reports" },
     { icon: <FaBell />, label: "Alerts", link: "/admin/alerts" },
-    { icon: <FaCog />, label: "Settings", link: "/admin/settings" },
   ];
 
   return (
