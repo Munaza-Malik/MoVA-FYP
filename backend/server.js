@@ -11,6 +11,7 @@ const authRoutes = require("./routes/authRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const userRoutes = require("./routes/userRoutes");
+const plateRoutes = require("./routes/plateRoutes");
 
 // Initialize app
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api/logs", require("./routes/logRoutes"));
 app.use("/api/users", userRoutes); 
 
 app.use("/uploads", express.static("uploads"));
+app.use("/api/plates", plateRoutes);
 
 
 // Default Route

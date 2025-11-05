@@ -14,12 +14,12 @@ export default function Logs() {
         const res = await axios.get(
           "http://localhost:5000/api/vehicles/my-vehicles",
           {
-            headers: { Authorization: `Bearer ${token} `},
+            headers: { Authorization: `Bearer ${token}` },
           }
         );
-        setVehicles(res.data.vehicles || []); // sets the array
+        setVehicles(res.data.vehicles || []);
       } catch (error) {
-        console.error("Error fetching vehicles:", error);
+        console.error("❌ Error fetching vehicles:", error);
       } finally {
         setLoading(false);
       }
@@ -27,7 +27,7 @@ export default function Logs() {
     fetchVehicles();
   }, []);
 
-  // 🔍 Filter vehicles
+  // 🔍 Filter vehicles by search input
   const filteredVehicles = vehicles.filter(
     (v) =>
       v.plateNumber?.toLowerCase().includes(search.toLowerCase()) ||
@@ -41,7 +41,7 @@ export default function Logs() {
         My Vehicle Logs
       </h1>
 
-      {/* Full-width Search Bar */}
+      {/* 🔍 Search Bar */}
       <div className="mb-6 w-full">
         <input
           type="text"
@@ -63,6 +63,7 @@ export default function Logs() {
               className="bg-white/95 backdrop-blur-sm p-6 rounded-2xl shadow-lg border-l-4 border-[#A6C76C]
                          hover:shadow-xl transition-transform transform hover:-translate-y-1"
             >
+              {/* 🚗 Vehicle Info */}
               <h2 className="text-2xl font-bold text-[#1A2B49] mb-2">
                 {v.plateNumber}
               </h2>
@@ -87,10 +88,49 @@ export default function Logs() {
                 {v.phone}
               </p>
 
-              <p className="text-sm text-gray-500 mt-2">
-                Registered At: {new Date(v.createdAt).toLocaleString()}
-              </p>
+              {/* 👨‍✈️ Drivers Section */}
+              {v.drivers && v.drivers.length > 0 && (
+                <div className="mt-4 bg-[#F9FAF9] p-3 rounded-lg shadow-sm">
+                  <h3 className="text-lg font-semibold text-[#1A2B49] mb-2">
+                    Driver Details
+                  </h3>
+                  {v.drivers.map((driver, index) => (
+                    <div
+                      key={index}
+                      className="border-b border-gray-200 pb-2 mb-2 last:border-none"
+                    >
+                      <p>
+                        <strong className="text-[#A6C76C]">Name:</strong>{" "}
+                        {driver.name || "N/A"}
+                      </p>
+                      <p>
+                        <strong className="text-[#A6C76C]">CNIC:</strong>{" "}
+                        {driver.cnic || "N/A"}
+                      </p>
+                      <p>
+                        <strong className="text-[#A6C76C]">Phone:</strong>{" "}
+                        {driver.phone || "N/A"}
+                      </p>
 
+                      {/* 🖼️ Driver Images (Correct Field: driverImages) */}
+                      {driver.driverImages && driver.driverImages.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {driver.driverImages.map((img, i) => (
+                            <img
+                              key={i}
+                              src={`http://localhost:5000/${img}`}
+                              alt="Driver"
+                              className="w-20 h-20 rounded-lg border border-gray-300 object-cover"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 📂 Documents */}
               {v.documents?.length > 0 && (
                 <div className="mt-3">
                   <strong className="text-[#1A2B49]">Documents:</strong>
@@ -110,6 +150,27 @@ export default function Logs() {
                   </ul>
                 </div>
               )}
+
+              {/* 🚘 Vehicle Images */}
+              {v.profileImages?.length > 0 && (
+                <div className="mt-4">
+                  <strong className="text-[#1A2B49]">Vehicle Images:</strong>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {v.profileImages.map((img, i) => (
+                      <img
+                        key={i}
+                        src={`http://localhost:5000/${img}`}
+                        alt="Vehicle"
+                        className="w-20 h-20 rounded-md border object-cover"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-sm text-gray-500 mt-2">
+                Registered At: {new Date(v.createdAt).toLocaleString()}
+              </p>
             </div>
           ))}
         </div>
