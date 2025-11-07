@@ -1,19 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
+import axios from "axios";
 
 export default function LiveMonitoring() {
   const videoRef = useRef(null);
   const mediaStreamRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
   const detectionIntervalRef = useRef(null);
 
   const [error, setError] = useState("");
   const [devices, setDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordedBlobs, setRecordedBlobs] = useState([]);
   const [zoom, setZoom] = useState(1);
   const [zoomSupported, setZoomSupported] = useState(false);
   const [detectedPlates, setDetectedPlates] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [plateText, setPlateText] = useState("");
+  const [accessMessage, setAccessMessage] = useState("");
 
   // =========================
   // Enumerate cameras
@@ -77,8 +78,11 @@ export default function LiveMonitoring() {
         setZoomSupported(false);
       }
 
-      // Start auto-detection (motion-based)
-      startAutoDetection();
+      // Wait for video to load before auto detection
+      videoRef.current.onloadeddata = () => {
+        console.log("🎥 Video ready — starting auto detection");
+        startAutoDetection();
+      };
     } catch (err) {
       console.error("Camera error:", err);
       setError("Camera access denied or not supported on this device.");
@@ -113,66 +117,12 @@ export default function LiveMonitoring() {
     }
   }
 
-  function takeSnapshot() {
-    if (!videoRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(videoRef.current, 0, 0);
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = "snapshot.png";
-    link.click();
-  }
-
-  function toggleRecording() {
-    if (isRecording) {
-      mediaRecorderRef.current?.stop();
-    } else {
-      startRecording();
-    }
-  }
-
-  function startRecording() {
-    const stream = mediaStreamRef.current;
-    if (!stream) return setError("No camera stream to record.");
-
-    const options = { mimeType: "video/webm;codecs=vp9" };
-    let recorded = [];
-
-    const mr = new MediaRecorder(stream, options);
-    mediaRecorderRef.current = mr;
-
-    mr.ondataavailable = (ev) => {
-      if (ev.data && ev.data.size > 0) recorded.push(ev.data);
-    };
-
-    mr.onstop = () => {
-      setIsRecording(false);
-      setRecordedBlobs(recorded);
-      const blob = new Blob(recorded, { type: "video/webm" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.style.display = "none";
-      a.href = url;
-      a.download = `recording_${Date.now()}.webm`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-    };
-
-    mr.start();
-    setIsRecording(true);
-    setRecordedBlobs([]);
-  }
-
   function handleDeviceSelect(e) {
     setSelectedDeviceId(e.target.value);
   }
 
   // =========================
-  // PLATE DETECTION FUNCTIONS
+  // Plate detection
   // =========================
   let prevFrameData = null;
   let isDetecting = false;
@@ -180,7 +130,7 @@ export default function LiveMonitoring() {
 
   async function detectVehiclePresence() {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return;
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -188,14 +138,20 @@ export default function LiveMonitoring() {
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0);
 
-    const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let frameData;
+    try {
+      frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    } catch (err) {
+      console.warn("Canvas not ready yet:", err);
+      return;
+    }
 
     if (prevFrameData) {
       let diff = 0;
       for (let i = 0; i < frameData.data.length; i += 4) {
-        diff += Math.abs(frameData.data[i] - prevFrameData.data[i]);       // R
-        diff += Math.abs(frameData.data[i + 1] - prevFrameData.data[i + 1]); // G
-        diff += Math.abs(frameData.data[i + 2] - prevFrameData.data[i + 2]); // B
+        diff += Math.abs(frameData.data[i] - prevFrameData.data[i]);
+        diff += Math.abs(frameData.data[i + 1] - prevFrameData.data[i + 1]);
+        diff += Math.abs(frameData.data[i + 2] - prevFrameData.data[i + 2]);
       }
       diff = diff / (frameData.data.length / 4);
 
@@ -206,7 +162,7 @@ export default function LiveMonitoring() {
       if (diff > MOTION_THRESHOLD && !isDetecting && now - lastDetectionTime > COOLDOWN_MS) {
         isDetecting = true;
         lastDetectionTime = now;
-        await detectPlate(); // send snapshot to backend
+        await detectPlate();
         isDetecting = false;
       }
     }
@@ -214,43 +170,108 @@ export default function LiveMonitoring() {
     prevFrameData = frameData;
   }
 
-async function detectPlate() {
-  if (!videoRef.current) return;
+  async function detectPlate() {
+    if (!videoRef.current || videoRef.current.videoWidth === 0) return;
 
-  const canvas = document.createElement("canvas");
-  canvas.width = videoRef.current.videoWidth;
-  canvas.height = videoRef.current.videoHeight;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
-  // Convert to base64 image
-  const base64Image = canvas.toDataURL("image/jpeg");
+    const base64Image = canvas.toDataURL("image/jpeg");
 
-  try {
-    const response = await fetch("http://127.0.0.1:5000/detect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64Image }),
-    });
+    try {
+      // Detect plate via YOLO + OCR backend
+      const response = await fetch("http://127.0.0.1:5000/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64Image }),
+      });
 
-    const result = await response.json();
-    if (result.text && result.text.length > 0) {
+      const result = await response.json();
+
+      if (!result.text || result.text.length === 0) {
+        setDetectedPlates([]);
+        setPlateText("");
+        setPreviewImage(null);
+        setError("No plate detected");
+        setAccessMessage("");
+        return;
+      }
+
       setDetectedPlates(result.text);
-    } else {
-      setDetectedPlates([]);
-    }
-  } catch (error) {
-    console.error("Error detecting plate:", error);
-    setError("Failed to connect to backend.");
-  }
-}
+      setPlateText(result.text.join(" | "));
+      setPreviewImage(result.plate_images?.[0] || null);
+      setError("");
 
+      // Normalize plate
+      let plateRaw = result.text[0] || "";
+      plateRaw = plateRaw.replace(/\s/g, "").toUpperCase();
+      plateRaw = plateRaw.replace(/[^A-Z0-9-]/g, "");
+
+      const match = plateRaw.match(/^([A-Z]{3}-\d{2,3})/);
+      const plate = match ? match[0] : plateRaw;
+
+      console.log("Normalized plate for DB lookup:", plate);
+
+      // Check in Vehicles DB
+      try {
+        const vehicleRes = await axios.get(`http://localhost:5000/api/vehicles/plate/${plate}`);
+
+        if (vehicleRes.data) {
+          let statusMessage = "";
+          if (vehicleRes.data.status === "Approved") {
+            setAccessMessage(
+              `✅ Authenticated User: ${vehicleRes.data.user?.name || "Unknown"} — Access Allowed`
+            );
+            statusMessage = "Entry";
+          } else {
+            setAccessMessage(
+              `❌ Vehicle ${plate} is registered but not allowed — Access Denied`
+            );
+            statusMessage = "Denied";
+          }
+
+          setError("");
+
+          // ====== Save log to backend ======
+          const logEntry = {
+           user: vehicleRes.data.user?.name || "Unknown",
+           vehicle: plate,
+           time: new Date().toISOString(),  // full timestamp
+           status: statusMessage,
+            };
+
+
+          try {
+            await axios.post("http://localhost:5000/api/logs", logEntry);
+            console.log("Log saved:", logEntry);
+          } catch (err) {
+            console.error("Failed to save log:", err);
+          }
+        }
+      } catch (err) {
+        if (err.response?.status === 404) {
+          console.log("Vehicle not found in DB");
+          setAccessMessage(`❌ Vehicle ${plate} not registered — Access Denied`);
+        } else {
+          console.error("Error fetching vehicle:", err);
+          setError("Failed to fetch vehicle info.");
+          setAccessMessage("");
+        }
+      }
+
+    } catch (error) {
+      console.error("Error detecting plate:", error);
+      setError("Failed to detect plate or connect to backend.");
+      setAccessMessage("");
+    }
+  }
 
   function startAutoDetection() {
     stopAutoDetection();
-    detectionIntervalRef.current = setInterval(() => {
-      detectVehiclePresence();
-    }, 1000);
+    detectionIntervalRef.current = setInterval(() => detectVehiclePresence(), 1000);
   }
 
   function stopAutoDetection() {
@@ -264,18 +285,57 @@ async function detectPlate() {
   // RENDER
   // =========================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] flex flex-col items-center p-8">
+    <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] flex flex-col items-center p-8 relative">
       <h1 className="text-5xl font-extrabold mb-10 text-center drop-shadow-md">
         Live Monitoring
       </h1>
 
-      <div className="w-full max-w-5xl">
+      <div className="flex justify-center items-start gap-6 w-full max-w-6xl">
+        {/* 🎥 Live Camera */}
+        <div className="relative w-[70%] h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-[#A6C76C]/40 bg-gradient-to-br from-[#A6C76C]/20 via-white/80 to-[#96B85C]/10">
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover rounded-3xl" />
+          <div className="absolute top-4 right-4 flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/30">
+            <span className="w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
+            <span className="text-sm font-semibold text-red-600">LIVE</span>
+          </div>
+
+          {detectedPlates.length > 0 && (
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 px-4 py-2 rounded-xl text-white font-bold text-lg">
+              {detectedPlates.join(" | ")}
+            </div>
+          )}
+        </div>
+
+        {/* 🧾 Plate Preview */}
+        {(previewImage || plateText) && (
+          <div className="w-[28%] bg-white/90 backdrop-blur-md border border-gray-300 shadow-xl rounded-xl p-4 text-center">
+            <h3 className="text-sm font-bold text-[#1A2B49] mb-2">Detected Plate</h3>
+            {previewImage && (
+              <img
+                src={previewImage}
+                alt="Detected Plate"
+                className="w-full h-32 object-contain rounded-md border border-gray-400 mb-2"
+              />
+            )}
+            {plateText && (
+              <p className="font-mono text-lg text-[#1A2B49] tracking-wider">{plateText}</p>
+            )}
+            {accessMessage && (
+              <div
+                className="mt-4 p-3 rounded-lg font-semibold text-white text-center"
+                style={{ backgroundColor: accessMessage.includes("Allowed") ? "green" : "red" }}
+              >
+                {accessMessage}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="w-full max-w-5xl mt-8">
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <select
-            value={selectedDeviceId ?? ""}
-            onChange={handleDeviceSelect}
-            className="px-3 py-2 rounded-md border"
-          >
+          <select value={selectedDeviceId ?? ""} onChange={handleDeviceSelect} className="px-3 py-2 rounded-md border">
             <option value="">Default Camera</option>
             {devices.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
@@ -290,43 +350,9 @@ async function detectPlate() {
           <button onClick={stopCamera} className="bg-[#FFA500] px-4 py-2 rounded-full text-white">
             Stop Camera
           </button>
-          <button onClick={takeSnapshot} className="bg-[#1A2B49] px-4 py-2 rounded-full text-white">
-            Snapshot
-          </button>
-          <button
-            onClick={toggleRecording}
-            className={`px-4 py-2 rounded-full text-white ${isRecording ? "bg-red-600" : "bg-[#A6C76C]"}`}
-          >
-            {isRecording ? "Stop Recording" : "Record"}
-          </button>
-          <button
-            onClick={detectPlate}
-            className="bg-[#1A73E8] px-4 py-2 rounded-full text-white"
-          >
+          <button onClick={detectPlate} className="bg-[#1A73E8] px-4 py-2 rounded-full text-white">
             Detect Plate
           </button>
-        </div>
-
-        <div className="relative w-full h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-[#A6C76C]/40 bg-gradient-to-br from-[#A6C76C]/20 via-white/80 to-[#96B85C]/10">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover rounded-3xl"
-          />
-          {/* LIVE badge */}
-          <div className="absolute top-4 right-4 flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/30">
-            <span className="w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
-            <span className="text-sm font-semibold text-red-600">LIVE</span>
-          </div>
-
-          {/* Detected plates overlay */}
-          {detectedPlates.length > 0 && (
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 px-4 py-2 rounded-xl text-white font-bold text-lg">
-              {detectedPlates.join(" | ")}
-            </div>
-          )}
         </div>
 
         {/* Zoom control */}

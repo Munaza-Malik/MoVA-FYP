@@ -67,3 +67,16 @@ Thumbs.db
 # =========================
 backend/config/db.js
 backend/config/*.json
+
+# Virtual environment
+backend/venv/
+
+# YOLO model weights
+backend/models/*.pt
+
+# Local database files
+backend/*.db
+
+# Python cache
+backend/__pycache__/
+backend/**/*.pyc

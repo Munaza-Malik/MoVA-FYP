@@ -27,13 +27,16 @@ export default function ManageVehicles() {
 
   const handleAction = async (id, action) => {
     try {
-      const res = await axios.put(
+      await axios.put(
         `http://localhost:5000/api/vehicles/${id}/status`,
         { status: action === "approve" ? "Approved" : "Rejected" },
         { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
+
       setVehicles((prev) =>
-        prev.map((v) => (v._id === id ? { ...v, status: res.data.status } : v))
+        prev.map((v) =>
+          v._id === id ? { ...v, status: action === "approve" ? "Approved" : "Rejected" } : v
+        )
       );
     } catch (err) {
       console.error("Error updating vehicle status:", err);
@@ -43,8 +46,8 @@ export default function ManageVehicles() {
   const filteredVehicles = vehicles
     .filter(
       (v) =>
-        v.user?.name.toLowerCase().includes(search.toLowerCase()) ||
-        v.plateNumber.toLowerCase().includes(search.toLowerCase())
+        v.ownerName?.toLowerCase().includes(search.toLowerCase()) ||
+        v.plateNumber?.toLowerCase().includes(search.toLowerCase())
     )
     .filter((v) => (statusFilter ? v.status === statusFilter : true));
 
@@ -74,6 +77,7 @@ export default function ManageVehicles() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -104,11 +108,12 @@ export default function ManageVehicles() {
               filteredVehicles.map((v, index) => (
                 <tr
                   key={v._id}
-                  className="border-b border-[#1A2B49]/10 hover:bg-[#A6C76C]/10 transition transform hover:scale-[1.01]"
+                  className="border-b border-[#1A2B49]/10 hover:bg-[#A6C76C]/10 transition"
                 >
                   <td className="py-3 px-4">{index + 1}</td>
-                  <td className="py-3 px-4">{v.user?.name || "N/A"}</td>
+                  <td className="py-3 px-4">{v.ownerName || "N/A"}</td>
                   <td className="py-3 px-4 font-semibold">{v.plateNumber}</td>
+
                   <td
                     className={`py-3 px-4 font-semibold ${
                       v.status === "Approved"
@@ -118,39 +123,43 @@ export default function ManageVehicles() {
                         : "text-yellow-500"
                     }`}
                   >
-                    {v.status || "Pending"}
+                    {v.status}
                   </td>
+
                   <td className="py-3 px-4 flex flex-wrap gap-2">
-                    {v.documents?.length > 0 ? (
+                    {v.documents?.length ? (
                       v.documents.map((doc, i) => (
                         <a
                           key={i}
-                          href={`http://localhost:5000/uploads/${doc}`}
+                          href={`http://localhost:5000/${doc}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-[#1A2B49] hover:text-[#A6C76C] underline transition"
                         >
-                          <FaFileAlt />
-                          Doc {i + 1}
+                          <FaFileAlt /> Doc {i + 1}
                         </a>
                       ))
                     ) : (
                       <span className="text-gray-500 italic">No docs</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 flex justify-center space-x-3">
-                    <button
-                      onClick={() => handleAction(v._id, "approve")}
-                      className="text-green-600 hover:text-green-500 transition transform hover:scale-110"
-                    >
-                      <FaCheck />
-                    </button>
-                    <button
-                      onClick={() => handleAction(v._id, "reject")}
-                      className="text-red-500 hover:text-red-400 transition transform hover:scale-110"
-                    >
-                      <FaTimes />
-                    </button>
+
+                  {/* ✅ ACTIONS HORIZONTAL */}
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex justify-center gap-4">
+                      <button
+                        onClick={() => handleAction(v._id, "approve")}
+                        className="text-green-600 hover:text-green-500 hover:scale-110 transition"
+                      >
+                        <FaCheck size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleAction(v._id, "reject")}
+                        className="text-red-500 hover:text-red-400 hover:scale-110 transition"
+                      >
+                        <FaTimes size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -163,11 +172,6 @@ export default function ManageVehicles() {
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* Footer Note */}
-      <div className="mt-8 px-6 py-3 rounded-xl bg-white/80 text-[#1A2B49]/70 text-center max-w-md shadow border border-[#A6C76C]/20">
-        Manage all registered vehicles efficiently with real-time approval tools.
       </div>
     </div>
   );
