@@ -1,22 +1,39 @@
 import React, { useState, useEffect } from "react";
 import { FaSignInAlt, FaSignOutAlt, FaDownload } from "react-icons/fa";
+import axios from "axios";
 
 export default function LogsReports() {
   const [search, setSearch] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [logs, setLogs] = useState([]);
 
+  // Update current time every second
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const logs = [
-    { id: 1, user: "Ali Raza", vehicle: "RIP-1234", time: "10:30 AM", status: "Entry" },
-    { id: 2, user: "Dr. Ahmed", vehicle: "RIP-5678", time: "11:15 AM", status: "Exit" },
-    { id: 3, user: "Sara Khan", vehicle: "RIP-9101", time: "12:00 PM", status: "Entry" },
-    { id: 4, user: "John Doe", vehicle: "RIP-1122", time: "1:20 PM", status: "Exit" },
-  ];
+  // Fetch logs from backend
+  useEffect(() => {
+    async function fetchLogs() {
+      try {
+        const response = await axios.get("http://localhost:5000/api/logs");
+        // Filter out invalid logs (ObjectId only, no user/vehicle)
+        const validLogs = response.data.filter(
+          (log) => log.user && log.vehicle && log.status
+        );
+        setLogs(validLogs);
+      } catch (err) {
+        console.error("Failed to fetch logs:", err);
+      }
+    }
 
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filter logs based on search
   const filteredLogs = logs.filter(
     (log) =>
       log.user.toLowerCase().includes(search.toLowerCase()) ||
@@ -24,6 +41,7 @@ export default function LogsReports() {
       log.status.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Export logs to CSV
   const exportCSV = () => {
     const header = ["#", "User", "Vehicle", "Time", "Status"];
     const rows = filteredLogs.map((log, index) => [
@@ -51,9 +69,7 @@ export default function LogsReports() {
     <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] p-10 flex flex-col items-center">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-center w-full max-w-5xl mb-8">
-        <h1 className="text-4xl font-extrabold text-[#1A2B49]">
-          Logs & Reports
-        </h1>
+        <h1 className="text-4xl font-extrabold text-[#1A2B49]">Logs & Reports</h1>
         <span className="text-[#1A2B49]/60 mt-2 md:mt-0 text-sm md:text-base">
           {currentTime.toLocaleString()}
         </span>
@@ -68,7 +84,6 @@ export default function LogsReports() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-
         <button
           onClick={exportCSV}
           className="flex items-center justify-center gap-2 bg-[#A6C76C] hover:bg-[#96B85C] text-[#1A2B49] font-semibold py-3 px-6 rounded-xl shadow-md transition"
@@ -93,7 +108,7 @@ export default function LogsReports() {
             {filteredLogs.length ? (
               filteredLogs.map((log, index) => (
                 <tr
-                  key={log.id}
+                  key={index}
                   className="border-b border-[#A6C76C]/20 hover:bg-[#A6C76C]/10 transition-all"
                 >
                   <td className="py-3 px-4">{index + 1}</td>

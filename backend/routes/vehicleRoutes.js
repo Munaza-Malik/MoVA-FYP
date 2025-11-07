@@ -181,4 +181,35 @@ router.get("/my-vehicles", authMiddleware, async (req, res) => {
   }
 });
 
+// =============================
+//  GET /api/vehicles/plate/:plate
+// =============================
+router.get("/plate/:plate", async (req, res) => {
+  try {
+    const plate = req.params.plate.toUpperCase().trim();
+
+    // Find vehicle and populate user details
+    const vehicle = await Vehicle.findOne({ plateNumber: plate }).populate(
+      "user", 
+      "name email" // only get name and email
+    );
+
+    if (!vehicle) return res.status(404).json(null);
+
+    // Add ownerName to response
+    const vehicleWithOwner = {
+      ...vehicle._doc,
+      ownerName: vehicle.user?.name || "Unknown",
+    };
+
+    res.json(vehicleWithOwner);
+  } catch (err) {
+    console.error("❌ Error fetching vehicle by plate:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
+
 module.exports = router;
