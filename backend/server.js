@@ -13,6 +13,8 @@ const contactRoutes = require("./routes/contactRoutes");
 const userRoutes = require("./routes/userRoutes");
 const plateRoutes = require("./routes/plateRoutes");
 const logsRoutes = require("./routes/logsRoutes");
+const alertRoutes = require("./routes/alertRoutes");
+
 
 // Initialize app
 const app = express();
@@ -33,7 +35,7 @@ app.use("/api/users", userRoutes);
 app.use("/uploads", express.static("uploads"));
 app.use("/api/plates", plateRoutes);
 app.use("/api/logs", logsRoutes);
-
+app.use("/api/alerts", alertRoutes);
 
 
 // Default Route
