@@ -16,9 +16,7 @@ export default function LiveMonitoring() {
   const [plateText, setPlateText] = useState("");
   const [accessMessage, setAccessMessage] = useState("");
 
-  // =========================
   // Enumerate cameras
-  // =========================
   useEffect(() => {
     async function fetchDevices() {
       try {
@@ -48,9 +46,7 @@ export default function LiveMonitoring() {
     return () => stopCamera();
   }, [selectedDeviceId]);
 
-  // =========================
   // Camera functions
-  // =========================
   async function startCamera(deviceId = null) {
     stopCamera();
     setError("");
@@ -121,9 +117,7 @@ export default function LiveMonitoring() {
     setSelectedDeviceId(e.target.value);
   }
 
-  // =========================
   // Plate detection
-  // =========================
   let prevFrameData = null;
   let isDetecting = false;
   let lastDetectionTime = 0;
@@ -141,8 +135,7 @@ export default function LiveMonitoring() {
     let frameData;
     try {
       frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } catch (err) {
-      console.warn("Canvas not ready yet:", err);
+    } catch {
       return;
     }
 
@@ -182,7 +175,6 @@ export default function LiveMonitoring() {
     const base64Image = canvas.toDataURL("image/jpeg");
 
     try {
-      // Detect plate via YOLO + OCR backend
       const response = await fetch("http://127.0.0.1:5000/detect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,64 +198,54 @@ export default function LiveMonitoring() {
       setError("");
 
       // Normalize plate
-      let plateRaw = result.text[0] || "";
-      plateRaw = plateRaw.replace(/\s/g, "").toUpperCase();
-      plateRaw = plateRaw.replace(/[^A-Z0-9-]/g, "");
+      let plateRaw = result.text[0].replace(/\s/g, "").toUpperCase().replace(/[^A-Z0-9-]/g, "");
+      const plate = plateRaw.match(/^([A-Z]{3}-\d{2,3})/)?.[0] || plateRaw;
 
-      const match = plateRaw.match(/^([A-Z]{3}-\d{2,3})/);
-      const plate = match ? match[0] : plateRaw;
+      console.log("Plate detected:", plate);
 
-      console.log("Normalized plate for DB lookup:", plate);
-
-      // Check in Vehicles DB
       try {
         const vehicleRes = await axios.get(`http://localhost:5000/api/vehicles/plate/${plate}`);
 
         if (vehicleRes.data) {
           let statusMessage = "";
           if (vehicleRes.data.status === "Approved") {
-            setAccessMessage(
-              `✅ Authenticated User: ${vehicleRes.data.user?.name || "Unknown"} — Access Allowed`
-            );
+            setAccessMessage(`✅ Authenticated User: ${vehicleRes.data.user?.name || "Unknown"} — Access Allowed`);
             statusMessage = "Entry";
           } else {
-            setAccessMessage(
-              `❌ Vehicle ${plate} is registered but not allowed — Access Denied`
-            );
+            setAccessMessage(`❌ Vehicle ${plate} detected — Status: ${vehicleRes.data.status}`);
             statusMessage = "Denied";
+
+            // Save alert for registered but not allowed
+            await axios.post("http://localhost:5000/api/alerts", {
+              vehicle: plate,
+              message: `Vehicle ${plate} detected — Status: ${vehicleRes.data.status}`,
+              type: "Warning",
+              time: new Date().toISOString(),
+            });
           }
 
-          setError("");
-
-          // ====== Save log to backend ======
-          const logEntry = {
-           user: vehicleRes.data.user?.name || "Unknown",
-           vehicle: plate,
-           time: new Date().toISOString(),  // full timestamp
-           status: statusMessage,
-            };
-
-
-          try {
-            await axios.post("http://localhost:5000/api/logs", logEntry);
-            console.log("Log saved:", logEntry);
-          } catch (err) {
-            console.error("Failed to save log:", err);
-          }
+          await axios.post("http://localhost:5000/api/logs", {
+            user: vehicleRes.data.user?.name || "Unknown",
+            vehicle: plate,
+            status: statusMessage,
+            time: new Date().toISOString(),
+          });
         }
       } catch (err) {
-        if (err.response?.status === 404) {
-          console.log("Vehicle not found in DB");
-          setAccessMessage(`❌ Vehicle ${plate} not registered — Access Denied`);
-        } else {
-          console.error("Error fetching vehicle:", err);
-          setError("Failed to fetch vehicle info.");
-          setAccessMessage("");
-        }
-      }
+        // Vehicle not found → unregistered
+        console.log("Vehicle not found:", plate);
+        setAccessMessage(`❌ Vehicle ${plate} not registered — Access Denied`);
 
-    } catch (error) {
-      console.error("Error detecting plate:", error);
+        // Save alert for unregistered vehicle
+        await axios.post("http://localhost:5000/api/alerts", {
+          vehicle: plate,
+          message: `Unregistered vehicle detected: ${plate}`,
+          type: "Critical",
+          time: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      console.error("Error detecting plate:", err);
       setError("Failed to detect plate or connect to backend.");
       setAccessMessage("");
     }
@@ -281,17 +263,12 @@ export default function LiveMonitoring() {
     }
   }
 
-  // =========================
-  // RENDER
-  // =========================
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] flex flex-col items-center p-8 relative">
-      <h1 className="text-5xl font-extrabold mb-10 text-center drop-shadow-md">
-        Live Monitoring
-      </h1>
+      <h1 className="text-5xl font-extrabold mb-10 text-center drop-shadow-md">Live Monitoring</h1>
 
       <div className="flex justify-center items-start gap-6 w-full max-w-6xl">
-        {/* 🎥 Live Camera */}
+        {/* Live Camera */}
         <div className="relative w-[70%] h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-[#A6C76C]/40 bg-gradient-to-br from-[#A6C76C]/20 via-white/80 to-[#96B85C]/10">
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover rounded-3xl" />
           <div className="absolute top-4 right-4 flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/30">
@@ -306,25 +283,14 @@ export default function LiveMonitoring() {
           )}
         </div>
 
-        {/* 🧾 Plate Preview */}
+        {/* Plate Preview */}
         {(previewImage || plateText) && (
           <div className="w-[28%] bg-white/90 backdrop-blur-md border border-gray-300 shadow-xl rounded-xl p-4 text-center">
             <h3 className="text-sm font-bold text-[#1A2B49] mb-2">Detected Plate</h3>
-            {previewImage && (
-              <img
-                src={previewImage}
-                alt="Detected Plate"
-                className="w-full h-32 object-contain rounded-md border border-gray-400 mb-2"
-              />
-            )}
-            {plateText && (
-              <p className="font-mono text-lg text-[#1A2B49] tracking-wider">{plateText}</p>
-            )}
+            {previewImage && <img src={previewImage} alt="Detected Plate" className="w-full h-32 object-contain rounded-md border border-gray-400 mb-2" />}
+            {plateText && <p className="font-mono text-lg text-[#1A2B49] tracking-wider">{plateText}</p>}
             {accessMessage && (
-              <div
-                className="mt-4 p-3 rounded-lg font-semibold text-white text-center"
-                style={{ backgroundColor: accessMessage.includes("Allowed") ? "green" : "red" }}
-              >
+              <div className={`mt-4 p-3 rounded-lg font-semibold text-white text-center ${accessMessage.includes("Allowed") ? "bg-green-600" : "bg-red-600"}`}>
                 {accessMessage}
               </div>
             )}
@@ -333,34 +299,24 @@ export default function LiveMonitoring() {
       </div>
 
       {/* Controls */}
-      <div className="w-full max-w-5xl mt-8">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <select value={selectedDeviceId ?? ""} onChange={handleDeviceSelect} className="px-3 py-2 rounded-md border">
-            <option value="">Default Camera</option>
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Camera ${d.deviceId}`}
-              </option>
-            ))}
-          </select>
+      <div className="w-full max-w-5xl mt-8 flex flex-wrap gap-3 items-center">
+        <select value={selectedDeviceId ?? ""} onChange={handleDeviceSelect} className="px-3 py-2 rounded-md border">
+          <option value="">Default Camera</option>
+          {devices.map((d) => (
+            <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${d.deviceId}`}</option>
+          ))}
+        </select>
 
-          <button onClick={() => startCamera(selectedDeviceId)} className="bg-[#A6C76C] px-4 py-2 rounded-full text-white">
-            Restart Camera
-          </button>
-          <button onClick={stopCamera} className="bg-[#FFA500] px-4 py-2 rounded-full text-white">
-            Stop Camera
-          </button>
-          <button onClick={detectPlate} className="bg-[#1A73E8] px-4 py-2 rounded-full text-white">
-            Detect Plate
-          </button>
-        </div>
+        <button onClick={() => startCamera(selectedDeviceId)} className="bg-[#A6C76C] px-4 py-2 rounded-full text-white">Restart Camera</button>
+        <button onClick={stopCamera} className="bg-[#FFA500] px-4 py-2 rounded-full text-white">Stop Camera</button>
+        <button onClick={detectPlate} className="bg-[#1A73E8] px-4 py-2 rounded-full text-white">Detect Plate</button>
 
         {/* Zoom control */}
-        <div className="mt-4 flex items-center gap-4">
+        <div className="flex items-center gap-4 mt-4">
           <label className="font-medium">Zoom</label>
           <input
             type="range"
-            min={zoomSupported ? 1 : 1}
+            min={1}
             max={zoomSupported ? zoom + 4 : 2}
             step="0.1"
             value={zoom}
@@ -368,11 +324,7 @@ export default function LiveMonitoring() {
             className="w-64"
             disabled={!mediaStreamRef.current}
           />
-          {!zoomSupported && (
-            <small className="text-xs text-gray-500">
-              Zoom not supported by camera; CSS scale used as fallback.
-            </small>
-          )}
+          {!zoomSupported && <small className="text-xs text-gray-500">Zoom not supported; CSS scale fallback used.</small>}
         </div>
 
         {error && <p className="text-red-600 mt-3">{error}</p>}
