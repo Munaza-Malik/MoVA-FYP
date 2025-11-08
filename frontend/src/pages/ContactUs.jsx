@@ -158,7 +158,7 @@ export default function ContactUs() {
           <div className="space-y-6 text-center md:text-left">
             <div className="flex items-center gap-4 justify-center md:justify-start">
               <FaEnvelope className="text-[#1A2B49] text-2xl" />
-              <p className="font-semibold text-[#1A2B49]">support@mova.ai</p>
+              <p className="font-semibold text-[#1A2B49]">mova.webservices@gmail.com</p>
             </div>
             <div className="flex items-center gap-4 justify-center md:justify-start">
               <FaPhone className="text-[#1A2B49] text-2xl" />

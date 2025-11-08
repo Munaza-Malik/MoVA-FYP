@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { FaEdit, FaTrash, FaUserPlus, FaDownload } from "react-icons/fa";
+import { FaEdit, FaTrash, FaUserPlus, FaDownload, FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function ManageUsers() {
   const [users, setUsers] = useState([]);
@@ -10,12 +10,12 @@ export default function ManageUsers() {
 
   const [userType, setUserType] = useState("student");
   const [profileImage, setProfileImage] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
-    confirmPassword: "",
     id: null,
   });
 
@@ -99,9 +99,6 @@ export default function ManageUsers() {
         newErrors.password =
           "Password must be at least 8 chars, include uppercase, lowercase, number, and special char.";
         valid = false;
-      } else if (formData.password !== formData.confirmPassword) {
-        newErrors.password = "Passwords do not match.";
-        valid = false;
       }
     }
 
@@ -158,112 +155,136 @@ export default function ManageUsers() {
     return valid;
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!validate()) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
 
-  try {
-    // Prepare FormData
-    const formDataToSend = new FormData();
+    try {
+      const formDataToSend = new FormData();
+      formDataToSend.append("name", formData.name || "");
+      formDataToSend.append("email", formData.email || "");
+      if (!editing) formDataToSend.append("password", formData.password || "");
+      formDataToSend.append("role", "user");
+      formDataToSend.append("userType", userType);
 
-    // Always append all fields (even empty strings) to avoid missing data
-    formDataToSend.append("name", formData.name || "");
-    formDataToSend.append("email", formData.email || "");
-    if (!editing) formDataToSend.append("password", formData.password || "");
-    formDataToSend.append("role", "user");
-    formDataToSend.append("userType", userType);
+      if (userType === "student") {
+        formDataToSend.append("faculty", studentDetails.faculty || "");
+        formDataToSend.append("programType", studentDetails.programType || "");
+        formDataToSend.append("semester", Number(studentDetails.semester) || "");
+        formDataToSend.append("batch", studentDetails.batch || "");
+        formDataToSend.append("year", studentDetails.year || "");
+        formDataToSend.append("phone", studentDetails.phone || "");
+        formDataToSend.append("sapId", studentDetails.sapId || "");
+      } else if (userType === "faculty") {
+        formDataToSend.append("faculty", facultyDetails.faculty || "");
+        formDataToSend.append("phone", facultyDetails.phone || "");
+        formDataToSend.append("sapId", facultyDetails.sapId || "");
+      } else if (userType === "guest") {
+        formDataToSend.append("phone", guestDetails.phone || "");
+      }
 
-    // UserType-specific fields
-    if (userType === "student") {
-      formDataToSend.append("faculty", studentDetails.faculty || "");
-      formDataToSend.append("programType", studentDetails.programType || "");
-      formDataToSend.append("semester", Number(studentDetails.semester) || "");
-      formDataToSend.append("batch", studentDetails.batch || "");
-      formDataToSend.append("year", studentDetails.year || "");
-      formDataToSend.append("phone", studentDetails.phone || "");
-      formDataToSend.append("sapId", studentDetails.sapId || "");
-    } else if (userType === "faculty") {
-      formDataToSend.append("faculty", facultyDetails.faculty || "");
-      formDataToSend.append("phone", facultyDetails.phone || "");
-      formDataToSend.append("sapId", facultyDetails.sapId || "");
-    } else if (userType === "guest") {
-      formDataToSend.append("phone", guestDetails.phone || "");
-    }
+      if (profileImage) {
+        formDataToSend.append("profileImage", profileImage);
+      }
 
-    // Profile image
-    if (profileImage) {
-      formDataToSend.append("profileImage", profileImage);
-    }
-
-    // Send request
-    if (editing) {
-      await axios.put(
-        `http://localhost:5000/api/users/${formData.id}`,
-        formDataToSend,
-        {
+      if (editing) {
+        await axios.put(`http://localhost:5000/api/users/${formData.id}`, formDataToSend, {
           headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
-      setEditing(false);
-    } else {
-      await axios.post(
-        "http://localhost:5000/api/users",
-        formDataToSend,
-        {
+        });
+        setEditing(false);
+      } else {
+        await axios.post("http://localhost:5000/api/users", formDataToSend, {
           headers: { "Content-Type": "multipart/form-data" },
-        }
-      );
+        });
+      }
+
+      setFormData({ name: "", email: "", password: "", id: null });
+      setStudentDetails({
+        faculty: "",
+        programType: "",
+        semester: "",
+        batch: "",
+        phone: "",
+        sapId: "",
+        year: "",
+      });
+      setFacultyDetails({ faculty: "", phone: "", sapId: "" });
+      setGuestDetails({ phone: "" });
+      setProfileImage(null);
+
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to save user.");
     }
-
-    // Reset form
-    setFormData({ name: "", email: "", password: "", confirmPassword: "", id: null });
-    setStudentDetails({ faculty: "", programType: "", semester: "", batch: "", phone: "", sapId: "", year: "" });
-    setFacultyDetails({ faculty: "", phone: "", sapId: "" });
-    setGuestDetails({ phone: "" });
-    setProfileImage(null);
-
-    fetchUsers();
-  } catch (err) {
-    console.error(err);
-    alert(err.response?.data?.message || "Failed to save user.");
-  }
-};
-
+  };
 
   const handleEdit = (user) => {
     setFormData({
       name: user.name,
       email: user.email,
       password: "",
-      confirmPassword: "",
       id: user._id,
     });
     setUserType(user.userType || "student");
     setProfileImage(null);
 
-    if (user.userType === "student") setStudentDetails({ faculty: user.faculty, programType: user.programType, semester: user.semester, batch: user.batch, phone: user.phone, sapId: user.sapId, year: user.year });
-    if (user.userType === "faculty") setFacultyDetails({ faculty: user.faculty, phone: user.phone, sapId: user.sapId });
+    if (user.userType === "student")
+      setStudentDetails({
+        faculty: user.faculty,
+        programType: user.programType,
+        semester: user.semester,
+        batch: user.batch,
+        phone: user.phone,
+        sapId: user.sapId,
+        year: user.year,
+      });
+    if (user.userType === "faculty")
+      setFacultyDetails({ faculty: user.faculty, phone: user.phone, sapId: user.sapId });
     if (user.userType === "guest") setGuestDetails({ phone: user.phone });
 
     setEditing(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this user?")) {
-      try {
-        await axios.delete(`http://localhost:5000/api/users/${id}`);
-        fetchUsers();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
+const handleDelete = async (id) => {
+  try {
+    await axios.delete(`http://localhost:5000/api/users/${id}`);
+    fetchUsers(); // refresh the list
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 
   const exportCSV = () => {
-    const headers = ["Name","Email","User Type","Faculty","Program Type","Semester","Batch","Year","Phone","SAP ID"];
-    const rows = filteredUsers.map((u) => [u.name,u.email,u.userType,u.faculty||"",u.programType||"",u.semester||"",u.batch||"",u.year||"",u.phone||"",u.sapId||""]);
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r)=>r.join(","))].join("\n");
+    const headers = [
+      "Name",
+      "Email",
+      "User Type",
+      "Faculty",
+      "Program Type",
+      "Semester",
+      "Batch",
+      "Year",
+      "Phone",
+      "SAP ID",
+    ];
+    const rows = filteredUsers.map((u) => [
+      u.name,
+      u.email,
+      u.userType,
+      u.faculty || "",
+      u.programType || "",
+      u.semester || "",
+      u.batch || "",
+      u.year || "",
+      u.phone || "",
+      u.sapId || "",
+    ]);
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.href = encodedUri;
@@ -282,97 +303,253 @@ const handleSubmit = async (e) => {
         </h2>
 
         <div className="flex justify-center mb-4">
-          {["student","faculty","guest"].map((type)=>(
-            <button key={type} type="button" onClick={()=>setUserType(type)}
-              className={`px-6 py-2 ${userType===type?"bg-[#A6C76C] text-white":"bg-gray-200 text-gray-700"} ${type==="student"?"rounded-l-full":type==="guest"?"rounded-r-full":""}`}>
-              {type.charAt(0).toUpperCase()+type.slice(1)}
+          {["student", "faculty", "guest"].map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setUserType(type)}
+              className={`px-6 py-2 ${
+                userType === type ? "bg-[#A6C76C] text-white" : "bg-gray-200 text-gray-700"
+              } ${type === "student" ? "rounded-l-full" : type === "guest" ? "rounded-r-full" : ""}`}
+            >
+              {type.charAt(0).toUpperCase() + type.slice(1)}
             </button>
           ))}
         </div>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <input type="text" name="name" placeholder="Full Name" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} className="col-span-1 p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]" required />
-          <input type="email" name="email" placeholder="Email" value={formData.email} onChange={e=>setFormData({...formData,email:e.target.value})} className="col-span-1 md:col-span-2 p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]" required />
+          <input
+            type="text"
+            name="name"
+            placeholder="Full Name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="col-span-1 p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]"
+            required
+          />
 
-          {/* Password only for new users */}
-          {!editing && <>
-            <input type="password" placeholder="Password" value={formData.password} onChange={e=>setFormData({...formData,password:e.target.value})} className="col-span-1 p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]" required />
-            <input type="password" placeholder="Confirm Password" value={formData.confirmPassword} onChange={e=>setFormData({...formData,confirmPassword:e.target.value})} className="col-span-1 p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]" required />
-          </>}
+          <input
+            type="email"
+            name="email"
+            placeholder="Email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            className="col-span-1 md:col-span-2 p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]"
+            required
+          />
+
+          {/* Password (with toggle) */}
+          {!editing && (
+            <div className="relative col-span-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full p-3 rounded-lg border focus:ring-2 focus:ring-[#A6C76C]"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-gray-500 hover:text-[#A6C76C]"
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
+            </div>
+          )}
 
           {/* Conditional Fields */}
-          {userType==="student" && <>
-            <select value={studentDetails.faculty} onChange={e=>setStudentDetails({...studentDetails,faculty:e.target.value})} className="col-span-1 p-3 rounded-lg border">
-              <option value="">Select Faculty</option>
-              <option>Faculty of Health & Medical Sciences (FHMS)</option>
-              <option>Faculty of Engineering & Applied Science (FEAS)</option>
-              <option>Faculty of Computing (FC)</option>
-              <option>Faculty of Social Sciences & Humanities (FSSH)</option>
-              <option>Faculty of Pharmaceutical Sciences (FPS)</option>
-              <option>Faculty of Management Sciences (FMS)</option>
-              <option>Faculty of Rehabilitation & Allied Health Sciences (FRAHS)</option>
-              <option>Faculty of Veterinary Sciences (FVS)</option>
-            </select>
-            <select value={studentDetails.programType} onChange={e=>setStudentDetails({...studentDetails,programType:e.target.value})} className="col-span-1 p-3 rounded-lg border">
-              <option value="">Select Program Type</option>
-              <option>Undergraduate Degree</option>
-              <option>Graduate Degree</option>
-              <option>Doctoral Degree</option>
-              <option>Certificate/Diploma</option>
-              <option>Associate Degree</option>
-            </select>
-            <input type="number" placeholder="Semester" value={studentDetails.semester} onChange={e=>setStudentDetails({...studentDetails,semester:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-            <select value={studentDetails.batch} onChange={e=>setStudentDetails({...studentDetails,batch:e.target.value})} className="col-span-1 p-3 rounded-lg border">
-              <option value="">Select Batch</option>
-              <option>Spring</option><option>Fall</option>
-            </select>
-            <input type="text" placeholder="Year" value={studentDetails.year} onChange={e=>setStudentDetails({...studentDetails,year:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-            <input type="text" placeholder="Phone" value={studentDetails.phone} onChange={e=>setStudentDetails({...studentDetails,phone:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-            <input type="text" placeholder="SAP ID" value={studentDetails.sapId} onChange={e=>setStudentDetails({...studentDetails,sapId:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-          </>}
+          {userType === "student" && (
+            <>
+              <select
+                value={studentDetails.faculty}
+                onChange={(e) =>
+                  setStudentDetails({ ...studentDetails, faculty: e.target.value })
+                }
+                className="col-span-1 p-3 rounded-lg border"
+              >
+                <option value="">Select Faculty</option>
+                <option>Faculty of Health & Medical Sciences (FHMS)</option>
+                <option>Faculty of Engineering & Applied Science (FEAS)</option>
+                <option>Faculty of Computing (FC)</option>
+                <option>Faculty of Social Sciences & Humanities (FSSH)</option>
+                <option>Faculty of Pharmaceutical Sciences (FPS)</option>
+                <option>Faculty of Management Sciences (FMS)</option>
+                <option>Faculty of Rehabilitation & Allied Health Sciences (FRAHS)</option>
+                <option>Faculty of Veterinary Sciences (FVS)</option>
+              </select>
 
-          {userType==="faculty" && <>
-            <select value={facultyDetails.faculty} onChange={e=>setFacultyDetails({...facultyDetails,faculty:e.target.value})} className="col-span-1 p-3 rounded-lg border">
-              <option value="">Select Faculty</option>
-              <option>Faculty of Health & Medical Sciences (FHMS)</option>
-              <option>Faculty of Engineering & Applied Science (FEAS)</option>
-              <option>Faculty of Computing (FC)</option>
-              <option>Faculty of Social Sciences & Humanities (FSSH)</option>
-              <option>Faculty of Pharmaceutical Sciences (FPS)</option>
-              <option>Faculty of Management Sciences (FMS)</option>
-              <option>Faculty of Rehabilitation & Allied Health Sciences (FRAHS)</option>
-              <option>Faculty of Veterinary Sciences (FVS)</option>
-            </select>
-            <input type="text" placeholder="Phone" value={facultyDetails.phone} onChange={e=>setFacultyDetails({...facultyDetails,phone:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-            <input type="text" placeholder="SAP ID" value={facultyDetails.sapId} onChange={e=>setFacultyDetails({...facultyDetails,sapId:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-          </>}
+              <select
+                value={studentDetails.programType}
+                onChange={(e) =>
+                  setStudentDetails({ ...studentDetails, programType: e.target.value })
+                }
+                className="col-span-1 p-3 rounded-lg border"
+              >
+                <option value="">Select Program Type</option>
+                <option>Undergraduate Degree</option>
+                <option>Graduate Degree</option>
+                <option>Doctoral Degree</option>
+                <option>Certificate/Diploma</option>
+                <option>Associate Degree</option>
+              </select>
 
-          {userType==="guest" && <>
-            <input type="text" placeholder="Phone" value={guestDetails.phone} onChange={e=>setGuestDetails({...guestDetails,phone:e.target.value})} className="col-span-1 p-3 rounded-lg border"/>
-          </>}
+              <input
+                type="number"
+                placeholder="Semester"
+                value={studentDetails.semester}
+                onChange={(e) =>
+                  setStudentDetails({ ...studentDetails, semester: e.target.value })
+                }
+                className="col-span-1 p-3 rounded-lg border"
+              />
+              <select
+                value={studentDetails.batch}
+                onChange={(e) => setStudentDetails({ ...studentDetails, batch: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              >
+                <option value="">Select Batch</option>
+                <option>Spring</option>
+                <option>Fall</option>
+              </select>
 
-          <input type="file" onChange={e=>setProfileImage(e.target.files[0])} className="col-span-1 md:col-span-2 p-3 rounded-lg border"/>
+              <input
+                type="text"
+                placeholder="Year"
+                value={studentDetails.year}
+                onChange={(e) => setStudentDetails({ ...studentDetails, year: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              />
+              <input
+                type="text"
+                placeholder="Phone"
+                value={studentDetails.phone}
+                onChange={(e) => setStudentDetails({ ...studentDetails, phone: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              />
+              <input
+                type="text"
+                placeholder="SAP ID"
+                value={studentDetails.sapId}
+                onChange={(e) => setStudentDetails({ ...studentDetails, sapId: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              />
+            </>
+          )}
+
+          {userType === "faculty" && (
+            <>
+              <select
+                value={facultyDetails.faculty}
+                onChange={(e) => setFacultyDetails({ ...facultyDetails, faculty: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              >
+                <option value="">Select Faculty</option>
+                <option>Faculty of Health & Medical Sciences (FHMS)</option>
+                <option>Faculty of Engineering & Applied Science (FEAS)</option>
+                <option>Faculty of Computing (FC)</option>
+                <option>Faculty of Social Sciences & Humanities (FSSH)</option>
+                <option>Faculty of Pharmaceutical Sciences (FPS)</option>
+                <option>Faculty of Management Sciences (FMS)</option>
+                <option>Faculty of Rehabilitation & Allied Health Sciences (FRAHS)</option>
+                <option>Faculty of Veterinary Sciences (FVS)</option>
+              </select>
+
+              <input
+                type="text"
+                placeholder="Phone"
+                value={facultyDetails.phone}
+                onChange={(e) => setFacultyDetails({ ...facultyDetails, phone: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              />
+              <input
+                type="text"
+                placeholder="SAP ID"
+                value={facultyDetails.sapId}
+                onChange={(e) => setFacultyDetails({ ...facultyDetails, sapId: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              />
+            </>
+          )}
+
+          {userType === "guest" && (
+            <>
+              <input
+                type="text"
+                placeholder="Phone"
+                value={guestDetails.phone}
+                onChange={(e) => setGuestDetails({ ...guestDetails, phone: e.target.value })}
+                className="col-span-1 p-3 rounded-lg border"
+              />
+            </>
+          )}
+
+          <input
+            type="file"
+            onChange={(e) => setProfileImage(e.target.files[0])}
+            className="col-span-1 md:col-span-2 p-3 rounded-lg border"
+          />
 
           <div className="col-span-1 flex gap-3">
-            <button type="submit" className={`flex-1 px-4 py-3 rounded-lg font-semibold ${editing?"bg-yellow-400 text-black":"bg-[#A6C76C] text-[#1A2B49]"}`}>{editing?"Update":"Add"}</button>
-            {editing && <button type="button" onClick={()=>{
-              setEditing(false);
-              setFormData({ name:"", email:"", password:"", confirmPassword:"", id:null });
-              setStudentDetails({ faculty:"", programType:"", semester:"", batch:"", phone:"", sapId:"", year:"" });
-              setFacultyDetails({ faculty:"", phone:"", sapId:"" });
-              setGuestDetails({ phone:"" });
-              setProfileImage(null);
-            }} className="px-4 py-3 rounded-lg bg-red-500 text-white">Cancel</button>}
+            <button
+              type="submit"
+              className={`flex-1 px-4 py-3 rounded-lg font-semibold ${
+                editing ? "bg-yellow-400 text-black" : "bg-[#A6C76C] text-[#1A2B49]"
+              }`}
+            >
+              {editing ? "Update" : "Add"}
+            </button>
+
+            {editing && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(false);
+                  setFormData({ name: "", email: "", password: "", id: null });
+                  setStudentDetails({
+                    faculty: "",
+                    programType: "",
+                    semester: "",
+                    batch: "",
+                    phone: "",
+                    sapId: "",
+                    year: "",
+                  });
+                  setFacultyDetails({ faculty: "", phone: "", sapId: "" });
+                  setGuestDetails({ phone: "" });
+                  setProfileImage(null);
+                }}
+                className="px-4 py-3 rounded-lg bg-red-500 text-white"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         </form>
 
-        {Object.values(errors).map((err,i)=><p key={i} className="text-red-500 mt-2">{err}</p>)}
+        {Object.values(errors).map((err, i) => (
+          <p key={i} className="text-red-500 mt-2">
+            {err}
+          </p>
+        ))}
       </div>
 
       {/* Search & CSV */}
       <div className="flex items-center justify-between w-full max-w-5xl mb-5">
-        <input type="text" placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} className="p-3 rounded-lg border w-1/3 focus:ring-2 focus:ring-[#A6C76C]" />
-        <button onClick={exportCSV} className="flex items-center gap-2 bg-[#A6C76C] px-4 py-2 rounded-lg text-[#1A2B49] hover:bg-[#96B85C]"><FaDownload /> Export CSV</button>
+        <input
+          type="text"
+          placeholder="Search..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="p-3 rounded-lg border w-1/3 focus:ring-2 focus:ring-[#A6C76C]"
+        />
+        <button
+          onClick={exportCSV}
+          className="flex items-center gap-2 bg-[#A6C76C] px-4 py-2 rounded-lg text-[#1A2B49] hover:bg-[#96B85C]"
+        >
+          <FaDownload /> Export CSV
+        </button>
       </div>
 
       {/* Users Table */}
@@ -389,19 +566,37 @@ const handleSubmit = async (e) => {
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length>0 ? filteredUsers.map(u=>(
-              <tr key={u._id} className="hover:bg-[#ECF3E8]/50">
-                <td className="p-3 border">{u.name}</td>
-                <td className="p-3 border">{u.email}</td>
-                <td className="p-3 border">{u.userType}</td>
-                <td className="p-3 border">{u.phone||"-"}</td>
-                <td className="p-3 border">{u.sapId||"-"}</td>
-                <td className="p-3 border flex gap-2">
-                  <button onClick={()=>handleEdit(u)} className="bg-yellow-400 hover:bg-yellow-300 px-3 py-1 rounded text-black"><FaEdit /></button>
-                  <button onClick={()=>handleDelete(u._id)} className="bg-red-500 hover:bg-red-400 px-3 py-1 rounded text-white"><FaTrash /></button>
+            {filteredUsers.length > 0 ? (
+              filteredUsers.map((u) => (
+                <tr key={u._id} className="hover:bg-[#ECF3E8]/50">
+                  <td className="p-3 border">{u.name}</td>
+                  <td className="p-3 border">{u.email}</td>
+                  <td className="p-3 border">{u.userType}</td>
+                  <td className="p-3 border">{u.phone || "-"}</td>
+                  <td className="p-3 border">{u.sapId || "-"}</td>
+                  <td className="p-3 border flex gap-2">
+                    <button
+                      onClick={() => handleEdit(u)}
+                      className="bg-yellow-400 hover:bg-yellow-300 px-3 py-1 rounded text-black"
+                    >
+                      <FaEdit />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(u._id)}
+                        className="bg-red-500 hover:bg-red-400 px-3 py-1 rounded text-white"
+                    >
+                      <FaTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6" className="p-3 text-center">
+                  No users found.
                 </td>
               </tr>
-            )) : (<tr><td colSpan="6" className="p-3 text-center">No users found.</td></tr>)}
+            )}
           </tbody>
         </table>
       </div>
