@@ -309,7 +309,6 @@ export default function LiveMonitoring() {
 
         <button onClick={() => startCamera(selectedDeviceId)} className="bg-[#A6C76C] px-4 py-2 rounded-full text-white">Restart Camera</button>
         <button onClick={stopCamera} className="bg-[#FFA500] px-4 py-2 rounded-full text-white">Stop Camera</button>
-        <button onClick={detectPlate} className="bg-[#1A73E8] px-4 py-2 rounded-full text-white">Detect Plate</button>
 
         {/* Zoom control */}
         <div className="flex items-center gap-4 mt-4">

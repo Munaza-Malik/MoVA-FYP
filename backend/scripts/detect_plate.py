@@ -7,16 +7,17 @@ import cv2
 import numpy as np
 import base64
 import sqlite3
+import re
 
 app = Flask(__name__)
 CORS(app)
 
 # ====== Load models ======
-model = YOLO("../models/best.pt")  # Your YOLOv11 number plate detection model
+model = YOLO("../models/best.pt")  # Your YOLO number plate detection model
 ocr_reader = easyocr.Reader(["en"])
 
 # ====== Database helper ======
-DB_PATH = "vehicles.db"  # database
+DB_PATH = "vehicles.db"  # SQLite database
 
 def check_plate_in_db(plate_text):
     try:
@@ -57,12 +58,12 @@ def detect():
         # Run YOLO detection
         results = model(frame)
 
-        plate_texts = []
+        plate_numbers = []
         plate_images = []
         matched = False
         vehicle_info = {}
 
-        # Loop over YOLO detections safely
+        # Loop over YOLO detections
         for r in results:
             try:
                 boxes = r.boxes.xyxy.cpu().numpy()
@@ -72,13 +73,23 @@ def detect():
                     if plate.size == 0:
                         continue
 
+                    # Optional: remove top 15-20% where province/city name usually is
+                    height = plate.shape[0]
+                    plate_number_area = plate[int(height*0.2):, :]
+
                     # OCR read
                     try:
-                        text_list = ocr_reader.readtext(plate, detail=0)
+                        text_list = ocr_reader.readtext(plate_number_area, detail=0)
                         if not text_list:
                             continue
-                        text = "".join(text_list).replace(" ", "")
-                        plate_texts.append(text)
+                        raw_text = "".join(text_list).replace(" ", "").upper()
+
+                        # Keep only letters A-Z and numbers 0-9 (ignore "ICT", "Punjab", etc.)
+                        numbers_only = re.findall(r'[A-Z0-9]+', raw_text)
+                        if not numbers_only:
+                            continue
+                        plate_number = numbers_only[0]  # take the first valid sequence
+                        plate_numbers.append(plate_number)
 
                         # Convert cropped plate to base64
                         _, buffer = cv2.imencode(".jpg", plate)
@@ -86,7 +97,7 @@ def detect():
                         plate_images.append(plate_base64)
 
                         # Check DB
-                        db_result = check_plate_in_db(text)
+                        db_result = check_plate_in_db(plate_number)
                         if db_result and not matched:  # Only take first matched vehicle
                             matched = True
                             vehicle_info = {"owner": db_result[1], "type": db_result[2]}
@@ -94,12 +105,13 @@ def detect():
                     except Exception as e:
                         print("OCR or DB processing error:", e)
                         continue
+
             except Exception as e:
                 print("YOLO result processing error:", e)
                 continue
 
         return jsonify({
-            "text": plate_texts,
+            "plates": plate_numbers,
             "plate_images": plate_images,
             "match": matched,
             "vehicle_info": vehicle_info
