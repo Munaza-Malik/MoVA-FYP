@@ -6,21 +6,18 @@ const upload = require("../middleware/upload"); // multer middleware
 
 // =============================
 //  POST /api/vehicles/register
+//  Only authenticated users can register a vehicle
 // =============================
 router.post(
   "/register",
   authMiddleware,
   upload.fields([
-    { name: "driverImages", maxCount: 3 }, // multiple driver images
+    { name: "driverImages", maxCount: 3 },
     { name: "documents", maxCount: 5 },
     { name: "profileImages", maxCount: 5 },
   ]),
   async (req, res) => {
     try {
-      console.log(" Vehicle Register API Hit!");
-      console.log(" req.body:", req.body);
-      console.log(" req.files:", req.files);
-
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ message: "User authentication failed" });
@@ -38,7 +35,6 @@ router.post(
         driverPhones,
       } = req.body;
 
-      //  Prevent duplicate plate number
       const existingVehicle = await Vehicle.findOne({ plateNumber });
       if (existingVehicle) {
         return res.status(400).json({
@@ -46,33 +42,21 @@ router.post(
         });
       }
 
-      //  Safely extract uploaded files
       const documents = req.files?.documents?.map((f) => f.path) || [];
       const profileImages = req.files?.profileImages?.map((f) => f.path) || [];
       const driverImages = req.files?.driverImages?.map((f) => f.path) || [];
 
-      //  Ensure arrays (so it doesn’t break when one driver only)
-      const driverNamesArr = Array.isArray(driverNames)
-        ? driverNames
-        : driverNames
-        ? [driverNames]
-        : [];
+      const driverNamesArr = Array.isArray(driverNames) ? driverNames : driverNames ? [driverNames] : [];
       const cnicsArr = Array.isArray(cnics) ? cnics : cnics ? [cnics] : [];
-      const driverPhonesArr = Array.isArray(driverPhones)
-        ? driverPhones
-        : driverPhones
-        ? [driverPhones]
-        : [];
+      const driverPhonesArr = Array.isArray(driverPhones) ? driverPhones : driverPhones ? [driverPhones] : [];
 
-      //  Map driver details correctly
       const drivers = driverNamesArr.map((name, index) => ({
         name: name || "",
         cnic: cnicsArr[index] || "",
         phone: driverPhonesArr[index] || "",
-        image: driverImages[index] || "", //  store driver image path (for Logs display)
+        image: driverImages[index] || "",
       }));
 
-      //  Create new vehicle entry
       const newVehicle = new Vehicle({
         user: userId,
         phone,
@@ -81,7 +65,7 @@ router.post(
         brand,
         model,
         color,
-        drivers, // structured driver array
+        drivers,
         profileImages,
         documents,
         status: "Pending",
@@ -90,28 +74,22 @@ router.post(
       await newVehicle.save();
 
       res.status(201).json({
-        message: " Vehicle registered successfully with multiple drivers!",
+        message: "Vehicle registered successfully!",
         vehicle: newVehicle,
       });
     } catch (err) {
-      console.error(" Vehicle register error:", err);
-      res.status(500).json({
-        message: "Error registering vehicle",
-        error: err.message,
-      });
+      console.error("Vehicle register error:", err);
+      res.status(500).json({ message: "Error registering vehicle", error: err.message });
     }
   }
 );
 
 // =============================
 //  GET /api/vehicles/admin
+//  Admin-only route to view all vehicles
 // =============================
-router.get("/admin", authMiddleware, async (req, res) => {
+router.get("/admin", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
     const vehicles = await Vehicle.find()
       .populate("user", "name email")
       .sort({ createdAt: -1 });
@@ -123,20 +101,17 @@ router.get("/admin", authMiddleware, async (req, res) => {
 
     res.json(vehiclesWithOwner);
   } catch (err) {
-    console.error(" Fetch vehicles error:", err);
+    console.error("Fetch vehicles error:", err);
     res.status(500).json({ message: "Error fetching vehicles" });
   }
 });
 
 // =============================
 //  PUT /api/vehicles/:id/status
+//  Admin-only route to update vehicle status
 // =============================
-router.put("/:id/status", authMiddleware, async (req, res) => {
+router.put("/:id/status", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
     const { status } = req.body;
 
     const vehicle = await Vehicle.findByIdAndUpdate(
@@ -151,63 +126,49 @@ router.put("/:id/status", authMiddleware, async (req, res) => {
 
     res.json({ message: "Vehicle status updated successfully", vehicle });
   } catch (err) {
-    console.error(" Update status error:", err);
-    res.status(500).json({
-      message: "Error updating vehicle status",
-      error: err.message,
-    });
+    console.error("Update status error:", err);
+    res.status(500).json({ message: "Error updating vehicle status", error: err.message });
   }
 });
 
 // =============================
 //  GET /api/vehicles/my-vehicles
+//  Authenticated users can view their vehicles
 // =============================
 router.get("/my-vehicles", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log(" Fetching vehicles for user:", userId);
-
-    const vehicles = await Vehicle.find({ user: userId }).sort({
-      createdAt: -1,
-    });
+    const vehicles = await Vehicle.find({ user: userId }).sort({ createdAt: -1 });
 
     res.status(200).json({
       count: vehicles.length,
       vehicles,
     });
   } catch (err) {
-    console.error(" Error fetching user's vehicles:", err);
+    console.error("Error fetching user's vehicles:", err);
     res.status(500).json({ message: "Failed to fetch vehicles" });
   }
 });
 
 // =============================
 //  GET /api/vehicles/plate/:plate
+//  Public route to get vehicle by plate number
 // =============================
 router.get("/plate/:plate", async (req, res) => {
   try {
     const plate = req.params.plate.toUpperCase().trim();
 
-    // Find vehicle and populate user details
-    const vehicle = await Vehicle.findOne({ plateNumber: plate }).populate(
-      "user", 
-      "name email" // only get name and email
-    );
+    const vehicle = await Vehicle.findOne({ plateNumber: plate })
+      .populate("user", "name email");
 
     if (!vehicle) return res.status(404).json(null);
 
-    // Add ownerName to response
-    const vehicleWithOwner = {
-      ...vehicle._doc,
-      ownerName: vehicle.user?.name || "Unknown",
-    };
-
+    const vehicleWithOwner = { ...vehicle._doc, ownerName: vehicle.user?.name || "Unknown" };
     res.json(vehicleWithOwner);
   } catch (err) {
-    console.error(" Error fetching vehicle by plate:", err);
+    console.error("Error fetching vehicle by plate:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 module.exports = router;

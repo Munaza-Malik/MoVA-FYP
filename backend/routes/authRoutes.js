@@ -11,28 +11,27 @@ const upload = require("../middleware/upload");
 
 const router = express.Router();
 
-//  Signup (with profile image upload)
+// Signup (with profile image upload) - Public
 router.post("/signup", upload.single("profileImage"), signup);
 
-// Login
+// Login - Public
 router.post("/login", login);
 
-// OTP Flow
+// OTP Flow - Public
 router.post("/forgot-password", sendOtp);
 router.post("/verify-otp", verifyOtp);
 
-// Profile
+// Profile - Authenticated users only
 router.get("/profile", authMiddleware, getProfile);
 
-// Dashboard (for all logged-in users)
+// Dashboard - Authenticated users only
 router.get("/dashboard", authMiddleware, (req, res) => {
   res.json({ message: `Welcome ${req.user.email}, you are logged in!` });
 });
 
-// ✅ Admin-only route
+// Admin-only route
 router.get("/admin-dashboard", authMiddleware, authMiddleware.requireAdmin, (req, res) => {
   res.json({ message: "Welcome, Admin!" });
 });
-
 
 module.exports = router;

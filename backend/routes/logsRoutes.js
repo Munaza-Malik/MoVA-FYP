@@ -1,10 +1,10 @@
-// backend/routes/logs.js
 const express = require("express");
 const router = express.Router();
 const Log = require("../models/Log");
+const authMiddleware = require("../middleware/authMiddleware");
 
-// GET /api/logs
-router.get("/", async (req, res) => {
+// GET /api/logs → Protected route
+router.get("/", authMiddleware, async (req, res) => {
   try {
     // Fetch all logs and sort by newest first
     const logs = await Log.find().sort({ time: -1 });
@@ -19,8 +19,8 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST /api/logs
-router.post("/", async (req, res) => {
+// POST /api/logs → Protected route
+router.post("/", authMiddleware, async (req, res) => {
   try {
     const { user, vehicle, status } = req.body;
     const log = new Log({
@@ -37,8 +37,8 @@ router.post("/", async (req, res) => {
   }
 });
 
-// DELETE /api/logs/:id  → Delete a specific log
-router.delete("/:id", async (req, res) => {
+// DELETE /api/logs/:id → Admin only
+router.delete("/:id", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const deletedLog = await Log.findByIdAndDelete(id);
@@ -54,8 +54,8 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/logs  → Delete all logs
-router.delete("/", async (req, res) => {
+// DELETE /api/logs → Admin only
+router.delete("/", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     await Log.deleteMany({});
     res.json({ message: "All logs deleted successfully" });
@@ -64,7 +64,5 @@ router.delete("/", async (req, res) => {
     res.status(500).json({ message: "Failed to delete all logs", error: err.message });
   }
 });
-
-
 
 module.exports = router;
