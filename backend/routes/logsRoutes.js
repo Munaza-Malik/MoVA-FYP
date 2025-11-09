@@ -37,6 +37,34 @@ router.post("/", async (req, res) => {
   }
 });
 
+// DELETE /api/logs/:id  → Delete a specific log
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedLog = await Log.findByIdAndDelete(id);
+
+    if (!deletedLog) {
+      return res.status(404).json({ message: "Log not found" });
+    }
+
+    res.json({ message: "Log deleted successfully", deletedLog });
+  } catch (err) {
+    console.error("Failed to delete log:", err);
+    res.status(500).json({ message: "Failed to delete log", error: err.message });
+  }
+});
+
+// DELETE /api/logs  → Delete all logs
+router.delete("/", async (req, res) => {
+  try {
+    await Log.deleteMany({});
+    res.json({ message: "All logs deleted successfully" });
+  } catch (err) {
+    console.error("Failed to delete all logs:", err);
+    res.status(500).json({ message: "Failed to delete all logs", error: err.message });
+  }
+});
+
 
 
 module.exports = router;
