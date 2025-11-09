@@ -209,16 +209,16 @@ export default function LiveMonitoring() {
         if (vehicleRes.data) {
           let statusMessage = "";
           if (vehicleRes.data.status === "Approved") {
-            setAccessMessage(`✅ Authenticated User: ${vehicleRes.data.user?.name || "Unknown"} — Access Allowed`);
+            setAccessMessage(` Authenticated User: ${vehicleRes.data.user?.name || "Unknown"} - Access Allowed`);
             statusMessage = "Entry";
           } else {
-            setAccessMessage(`❌ Vehicle ${plate} detected — Status: ${vehicleRes.data.status}`);
+            setAccessMessage(` Vehicle ${plate} detected - Status: ${vehicleRes.data.status}`);
             statusMessage = "Denied";
 
             // Save alert for registered but not allowed
             await axios.post("http://localhost:5000/api/alerts", {
               vehicle: plate,
-              message: `Vehicle ${plate} detected — Status: ${vehicleRes.data.status}`,
+              message: `Vehicle ${plate} detected - Status: ${vehicleRes.data.status}`,
               type: "Warning",
               time: new Date().toISOString(),
             });
@@ -234,7 +234,7 @@ export default function LiveMonitoring() {
       } catch (err) {
         // Vehicle not found → unregistered
         console.log("Vehicle not found:", plate);
-        setAccessMessage(`❌ Vehicle ${plate} not registered — Access Denied`);
+        setAccessMessage(` Vehicle ${plate} not registered - Access Denied`);
 
         // Save alert for unregistered vehicle
         await axios.post("http://localhost:5000/api/alerts", {

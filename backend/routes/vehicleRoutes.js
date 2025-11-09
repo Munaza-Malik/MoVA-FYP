@@ -17,9 +17,9 @@ router.post(
   ]),
   async (req, res) => {
     try {
-      console.log("✅ Vehicle Register API Hit!");
-      console.log("📩 req.body:", req.body);
-      console.log("🖼️ req.files:", req.files);
+      console.log(" Vehicle Register API Hit!");
+      console.log(" req.body:", req.body);
+      console.log(" req.files:", req.files);
 
       const userId = req.user?.id;
       if (!userId) {
@@ -38,7 +38,7 @@ router.post(
         driverPhones,
       } = req.body;
 
-      // ✅ Prevent duplicate plate number
+      //  Prevent duplicate plate number
       const existingVehicle = await Vehicle.findOne({ plateNumber });
       if (existingVehicle) {
         return res.status(400).json({
@@ -46,12 +46,12 @@ router.post(
         });
       }
 
-      // ✅ Safely extract uploaded files
+      //  Safely extract uploaded files
       const documents = req.files?.documents?.map((f) => f.path) || [];
       const profileImages = req.files?.profileImages?.map((f) => f.path) || [];
       const driverImages = req.files?.driverImages?.map((f) => f.path) || [];
 
-      // ✅ Ensure arrays (so it doesn’t break when one driver only)
+      //  Ensure arrays (so it doesn’t break when one driver only)
       const driverNamesArr = Array.isArray(driverNames)
         ? driverNames
         : driverNames
@@ -64,15 +64,15 @@ router.post(
         ? [driverPhones]
         : [];
 
-      // ✅ Map driver details correctly
+      //  Map driver details correctly
       const drivers = driverNamesArr.map((name, index) => ({
         name: name || "",
         cnic: cnicsArr[index] || "",
         phone: driverPhonesArr[index] || "",
-        image: driverImages[index] || "", // ✅ store driver image path (for Logs display)
+        image: driverImages[index] || "", //  store driver image path (for Logs display)
       }));
 
-      // ✅ Create new vehicle entry
+      //  Create new vehicle entry
       const newVehicle = new Vehicle({
         user: userId,
         phone,
@@ -90,11 +90,11 @@ router.post(
       await newVehicle.save();
 
       res.status(201).json({
-        message: "✅ Vehicle registered successfully with multiple drivers!",
+        message: " Vehicle registered successfully with multiple drivers!",
         vehicle: newVehicle,
       });
     } catch (err) {
-      console.error("❌ Vehicle register error:", err);
+      console.error(" Vehicle register error:", err);
       res.status(500).json({
         message: "Error registering vehicle",
         error: err.message,
@@ -123,7 +123,7 @@ router.get("/admin", authMiddleware, async (req, res) => {
 
     res.json(vehiclesWithOwner);
   } catch (err) {
-    console.error("❌ Fetch vehicles error:", err);
+    console.error(" Fetch vehicles error:", err);
     res.status(500).json({ message: "Error fetching vehicles" });
   }
 });
@@ -151,7 +151,7 @@ router.put("/:id/status", authMiddleware, async (req, res) => {
 
     res.json({ message: "Vehicle status updated successfully", vehicle });
   } catch (err) {
-    console.error("❌ Update status error:", err);
+    console.error(" Update status error:", err);
     res.status(500).json({
       message: "Error updating vehicle status",
       error: err.message,
@@ -165,7 +165,7 @@ router.put("/:id/status", authMiddleware, async (req, res) => {
 router.get("/my-vehicles", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log("🔍 Fetching vehicles for user:", userId);
+    console.log(" Fetching vehicles for user:", userId);
 
     const vehicles = await Vehicle.find({ user: userId }).sort({
       createdAt: -1,
@@ -176,7 +176,7 @@ router.get("/my-vehicles", authMiddleware, async (req, res) => {
       vehicles,
     });
   } catch (err) {
-    console.error("❌ Error fetching user's vehicles:", err);
+    console.error(" Error fetching user's vehicles:", err);
     res.status(500).json({ message: "Failed to fetch vehicles" });
   }
 });
@@ -204,12 +204,10 @@ router.get("/plate/:plate", async (req, res) => {
 
     res.json(vehicleWithOwner);
   } catch (err) {
-    console.error("❌ Error fetching vehicle by plate:", err);
+    console.error(" Error fetching vehicle by plate:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
-
-
 
 
 module.exports = router;

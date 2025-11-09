@@ -42,7 +42,7 @@ export default function Alerts() {
       <div className="space-y-6 w-full max-w-4xl">
         {alerts.map((a) => (
           <div
-            key={a.id}
+            key={a._id}
             className="flex items-center justify-between bg-white border border-[#A6C76C]/30 p-5 rounded-2xl shadow-md hover:shadow-lg transform transition duration-300 hover:scale-[1.01]"
           >
             <div className="flex items-center space-x-3">
@@ -59,7 +59,7 @@ export default function Alerts() {
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${typeColor[a.type]}`}>
                 {a.type}
               </span>
-              <button onClick={() => dismissAlert(a.id)} className="text-[#1A2B49]/50 hover:text-red-500 transition">
+              <button onClick={() => dismissAlert(a._id)} className="text-[#1A2B49]/50 hover:text-red-500 transition">
                 <FaTimes />
               </button>
             </div>
@@ -68,7 +68,7 @@ export default function Alerts() {
 
         {alerts.length === 0 && (
           <div className="text-center mt-6 bg-white border border-[#A6C76C]/30 rounded-2xl shadow p-6">
-            <p className="text-[#1A2B49]/70 text-lg font-medium">No active alerts — all systems running smoothly</p>
+            <p className="text-[#1A2B49]/70 text-lg font-medium">No active alerts - all systems running smoothly</p>
           </div>
         )}
       </div>
