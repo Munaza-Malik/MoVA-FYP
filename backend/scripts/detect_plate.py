@@ -12,11 +12,11 @@ app = Flask(__name__)
 CORS(app)
 
 # ====== Load models ======
-model = YOLO("../models/best.pt")  # Your YOLOv8 number plate detection model
+model = YOLO("../models/best.pt")  # Your YOLOv11 number plate detection model
 ocr_reader = easyocr.Reader(["en"])
 
 # ====== Database helper ======
-DB_PATH = "vehicles.db"  # Your SQLite database
+DB_PATH = "vehicles.db"  # database
 
 def check_plate_in_db(plate_text):
     try:
@@ -33,7 +33,7 @@ def check_plate_in_db(plate_text):
 # ====== Home ======
 @app.route('/')
 def home():
-    return "🚀 YOLOv8 + OCR + DB API is running!"
+    return " YOLOv8 + OCR + DB API is running!"
 
 # ====== Detect license plate safely ======
 @app.route('/detect', methods=['POST'])
