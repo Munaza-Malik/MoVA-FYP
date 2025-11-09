@@ -2,10 +2,13 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const upload = require("../middleware/upload"); // Multer config
+const authMiddleware = require("../middleware/authMiddleware"); // <- added
+
 const router = express.Router();
 
 // ===== GET all users =====
-router.get("/", async (req, res) => {
+// Only authenticated users can view users
+router.get("/", authMiddleware, async (req, res) => {
   try {
     const users = await User.find().select("-password"); // exclude password
     res.status(200).json(users);
@@ -16,7 +19,8 @@ router.get("/", async (req, res) => {
 });
 
 // ===== ADD new user =====
-router.post("/", upload.single("profileImage"), async (req, res) => {
+// Only admin can add a new user
+router.post("/", authMiddleware, authMiddleware.requireAdmin, upload.single("profileImage"), async (req, res) => {
   try {
     const {
       name,
@@ -33,21 +37,17 @@ router.post("/", upload.single("profileImage"), async (req, res) => {
       sapId,
     } = req.body;
 
-    // Validate fields
     if (!name || !email || !role || !password) {
       return res.status(400).json({ message: "Please provide all required fields" });
     }
 
-    // Check if email exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Prepare user object with all optional fields
     const newUserData = {
       name,
       email,
@@ -63,16 +63,13 @@ router.post("/", upload.single("profileImage"), async (req, res) => {
       sapId: sapId || null,
     };
 
-    // Add uploaded file path if any
     if (req.file) {
       newUserData.profileImage = req.file.path.replace(/\\/g, "/");
     }
 
-    // Save user
     const newUser = new User(newUserData);
     const savedUser = await newUser.save();
 
-    // Exclude password in response
     const { password: _, ...userWithoutPassword } = savedUser.toObject();
     res.status(201).json(userWithoutPassword);
   } catch (error) {
@@ -82,18 +79,17 @@ router.post("/", upload.single("profileImage"), async (req, res) => {
 });
 
 // ===== UPDATE user =====
-router.put("/:id", upload.single("profileImage"), async (req, res) => {
+// Only admin can update users
+router.put("/:id", authMiddleware, authMiddleware.requireAdmin, upload.single("profileImage"), async (req, res) => {
   try {
     const updateData = { ...req.body };
 
-    // Hash new password if provided
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 10);
     } else {
-      delete updateData.password; // don't overwrite with empty string
+      delete updateData.password;
     }
 
-    // Include uploaded file if any
     if (req.file) {
       updateData.profileImage = req.file.path.replace(/\\/g, "/");
     }
@@ -116,7 +112,8 @@ router.put("/:id", upload.single("profileImage"), async (req, res) => {
 });
 
 // ===== DELETE user =====
-router.delete("/:id", async (req, res) => {
+// Only admin can delete users
+router.delete("/:id", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     const deletedUser = await User.findByIdAndDelete(req.params.id);
     if (!deletedUser) {

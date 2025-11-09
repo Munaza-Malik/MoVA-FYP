@@ -1,11 +1,11 @@
-// routes/alertRoutes.js
 const express = require("express");
 const Alert = require("../models/Alert");
+const authMiddleware = require("../middleware/authMiddleware"); // import your auth middleware
 
 const router = express.Router();
 
-// GET all alerts
-router.get("/", async (req, res) => {
+// GET all alerts - Authenticated users only
+router.get("/", authMiddleware, async (req, res) => {
   try {
     const alerts = await Alert.find().sort({ time: -1 });
     res.json(alerts);
@@ -15,9 +15,8 @@ router.get("/", async (req, res) => {
   }
 });
 
-
-// POST new alert
-router.post("/", async (req, res) => {
+// POST new alert - Authenticated users only
+router.post("/", authMiddleware, async (req, res) => {
   try {
     const alert = new Alert(req.body);
     await alert.save();
@@ -27,8 +26,8 @@ router.post("/", async (req, res) => {
   }
 });
 
-// DELETE alert by id
-router.delete("/:id", async (req, res) => {
+// DELETE alert by id - Admin only
+router.delete("/:id", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     await Alert.findByIdAndDelete(req.params.id);
     res.json({ message: "Alert deleted" });

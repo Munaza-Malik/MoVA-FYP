@@ -3,9 +3,10 @@ const router = express.Router();
 const User = require("../models/User");
 const Vehicle = require("../models/Vehicle");
 const Log = require("../models/Log");
+const authMiddleware = require("../middleware/authMiddleware"); // Import your middleware
 
-// GET /api/admin/stats
-router.get("/stats", async (req, res) => {
+// GET /api/admin/stats - Admin only
+router.get("/stats", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalVehicles = await Vehicle.countDocuments();
