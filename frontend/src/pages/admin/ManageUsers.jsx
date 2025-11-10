@@ -1,6 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
-import { FaEdit, FaTrash, FaUserPlus, FaDownload, FaEye, FaEyeSlash } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaUserPlus,
+  FaDownload,
+  FaEye,
+  FaEyeSlash,
+} from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 
 export default function ManageUsers() {
   const [users, setUsers] = useState([]);
@@ -39,20 +47,42 @@ export default function ManageUsers() {
     phone: "",
   });
 
-  // Fetch users
-  const fetchUsers = async () => {
+  const navigate = useNavigate();
+
+  // ==============================
+  // Fetch Users (with Token)
+  // ==============================
+  const fetchUsers = useCallback(async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/users");
+      const token = localStorage.getItem("token"); // assuming token saved at login
+      if (!token) {
+        alert("Session expired. Please log in again.");
+        navigate("/login");
+        return;
+      }
+
+      const res = await axios.get("http://localhost:5000/api/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
       setUsers(res.data);
     } catch (err) {
       console.error("Error fetching users:", err);
+      if (err.response?.status === 401) {
+        alert("Unauthorized! Please log in again.");
+        localStorage.removeItem("token");
+        navigate("/login");
+      }
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
+  // ==============================
+  // Filter Users
+  // ==============================
   const filteredUsers = users
     .filter((u) => u.role === "user")
     .filter(
@@ -62,7 +92,9 @@ export default function ManageUsers() {
         u.userType.toLowerCase().includes(search.toLowerCase())
     );
 
+  // ==============================
   // Validation
+  // ==============================
   const validate = () => {
     let valid = true;
     const newErrors = {};
@@ -72,8 +104,10 @@ export default function ManageUsers() {
       valid = false;
     }
 
-    // Email validation
-    if (userType === "student" && !formData.email.endsWith("@students.riphah.edu.pk")) {
+    if (
+      userType === "student" &&
+      !formData.email.endsWith("@students.riphah.edu.pk")
+    ) {
       newErrors.email = "Students must use '@students.riphah.edu.pk' email.";
       valid = false;
     }
@@ -91,7 +125,6 @@ export default function ManageUsers() {
       }
     }
 
-    // Password (only for adding new users)
     if (!editing) {
       const strongPasswordRegex =
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
@@ -102,27 +135,11 @@ export default function ManageUsers() {
       }
     }
 
-    // UserType-specific validation
     if (userType === "student") {
-      const { faculty, programType, semester, batch, phone, sapId, year } = studentDetails;
+      const { faculty, programType, semester, batch, phone, sapId, year } =
+        studentDetails;
       if (!faculty || !programType || !semester || !batch || !phone || !sapId || !year) {
         newErrors.student = "All student details are required.";
-        valid = false;
-      }
-      if (!/^\d{5}$/.test(sapId)) {
-        newErrors.student = "SAP ID must be exactly 5 digits.";
-        valid = false;
-      }
-      if (!/^\d{11}$/.test(phone)) {
-        newErrors.student = "Phone must be 11 digits.";
-        valid = false;
-      }
-      if (!/^\d{4}$/.test(year)) {
-        newErrors.student = "Year must be 4 digits.";
-        valid = false;
-      }
-      if (!(semester >= 1 && semester <= 8)) {
-        newErrors.student = "Semester must be between 1 and 8.";
         valid = false;
       }
     }
@@ -133,20 +150,12 @@ export default function ManageUsers() {
         newErrors.faculty = "All faculty details are required.";
         valid = false;
       }
-      if (!/^\d{4}$/.test(sapId)) {
-        newErrors.faculty = "SAP ID must be exactly 4 digits.";
-        valid = false;
-      }
-      if (!/^\d{11}$/.test(phone)) {
-        newErrors.faculty = "Phone must be 11 digits.";
-        valid = false;
-      }
     }
 
     if (userType === "guest") {
       const { phone } = guestDetails;
-      if (!phone || !/^\d{11}$/.test(phone)) {
-        newErrors.guest = "Phone must be 11 digits.";
+      if (!phone) {
+        newErrors.guest = "Phone is required.";
         valid = false;
       }
     }
@@ -155,32 +164,38 @@ export default function ManageUsers() {
     return valid;
   };
 
+  // ==============================
+  // Add / Update User
+  // ==============================
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("Unauthorized! Please log in again.");
+        navigate("/login");
+        return;
+      }
+
       const formDataToSend = new FormData();
-      formDataToSend.append("name", formData.name || "");
-      formDataToSend.append("email", formData.email || "");
-      if (!editing) formDataToSend.append("password", formData.password || "");
+      formDataToSend.append("name", formData.name);
+      formDataToSend.append("email", formData.email);
+      if (!editing) formDataToSend.append("password", formData.password);
       formDataToSend.append("role", "user");
       formDataToSend.append("userType", userType);
 
       if (userType === "student") {
-        formDataToSend.append("faculty", studentDetails.faculty || "");
-        formDataToSend.append("programType", studentDetails.programType || "");
-        formDataToSend.append("semester", Number(studentDetails.semester) || "");
-        formDataToSend.append("batch", studentDetails.batch || "");
-        formDataToSend.append("year", studentDetails.year || "");
-        formDataToSend.append("phone", studentDetails.phone || "");
-        formDataToSend.append("sapId", studentDetails.sapId || "");
+        Object.entries(studentDetails).forEach(([k, v]) =>
+          formDataToSend.append(k, v)
+        );
       } else if (userType === "faculty") {
-        formDataToSend.append("faculty", facultyDetails.faculty || "");
-        formDataToSend.append("phone", facultyDetails.phone || "");
-        formDataToSend.append("sapId", facultyDetails.sapId || "");
+        Object.entries(facultyDetails).forEach(([k, v]) =>
+          formDataToSend.append(k, v)
+        );
       } else if (userType === "guest") {
-        formDataToSend.append("phone", guestDetails.phone || "");
+        formDataToSend.append("phone", guestDetails.phone);
       }
 
       if (profileImage) {
@@ -188,13 +203,23 @@ export default function ManageUsers() {
       }
 
       if (editing) {
-        await axios.put(`http://localhost:5000/api/users/${formData.id}`, formDataToSend, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        await axios.put(
+          `http://localhost:5000/api/users/${formData.id}`,
+          formDataToSend,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
         setEditing(false);
       } else {
         await axios.post("http://localhost:5000/api/users", formDataToSend, {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
         });
       }
 
@@ -219,6 +244,9 @@ export default function ManageUsers() {
     }
   };
 
+  // ==============================
+  // Edit User
+  // ==============================
   const handleEdit = (user) => {
     setFormData({
       name: user.name,
@@ -240,23 +268,41 @@ export default function ManageUsers() {
         year: user.year,
       });
     if (user.userType === "faculty")
-      setFacultyDetails({ faculty: user.faculty, phone: user.phone, sapId: user.sapId });
+      setFacultyDetails({
+        faculty: user.faculty,
+        phone: user.phone,
+        sapId: user.sapId,
+      });
     if (user.userType === "guest") setGuestDetails({ phone: user.phone });
 
     setEditing(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-const handleDelete = async (id) => {
-  try {
-    await axios.delete(`http://localhost:5000/api/users/${id}`);
-    fetchUsers(); // refresh the list
-  } catch (err) {
-    console.error(err);
-  }
-};
+  // ==============================
+  // Delete User
+  // ==============================
+  const handleDelete = async (id) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("Unauthorized! Please log in again.");
+        navigate("/login");
+        return;
+      }
 
+      await axios.delete(`http://localhost:5000/api/users/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchUsers();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
+  // ==============================
+  // Export CSV
+  // ==============================
   const exportCSV = () => {
     const headers = [
       "Name",

@@ -74,7 +74,6 @@ export default function LiveMonitoring() {
         setZoomSupported(false);
       }
 
-      // Wait for video to load before auto detection
       videoRef.current.onloadeddata = () => {
         console.log("🎥 Video ready — starting auto detection");
         startAutoDetection();
@@ -183,7 +182,7 @@ export default function LiveMonitoring() {
 
       const result = await response.json();
 
-      if (!result.text || result.text.length === 0) {
+      if (!result.plates || result.plates.length === 0) {
         setDetectedPlates([]);
         setPlateText("");
         setPreviewImage(null);
@@ -192,19 +191,28 @@ export default function LiveMonitoring() {
         return;
       }
 
-      setDetectedPlates(result.text);
-      setPlateText(result.text.join(" | "));
+      // ✅ Update with plates from Flask
+      setDetectedPlates(result.plates);
+      setPlateText(result.plates.join(" | "));
       setPreviewImage(result.plate_images?.[0] || null);
       setError("");
 
+      let plate = "";
       // Normalize plate
-      let plateRaw = result.text[0].replace(/\s/g, "").toUpperCase().replace(/[^A-Z0-9-]/g, "");
-      const plate = plateRaw.match(/^([A-Z]{3}-\d{2,3})/)?.[0] || plateRaw;
+let plateRaw = result.plates[0].replace(/\s/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+if (plateRaw.length >= 6) {
+    plate = plateRaw.slice(0, 3) + "-" + plateRaw.slice(3, 6);
+}
+
+
+console.log("Normalized Plate:", plate);
+
 
       console.log("Plate detected:", plate);
 
       try {
-        const vehicleRes = await axios.get(`http://localhost:5000/api/vehicles/plate/${plate}`);
+        const vehicleRes = await axios.get(`http://localhost:5000/api/plates/${plate}`);
+
 
         if (vehicleRes.data) {
           let statusMessage = "";
@@ -215,7 +223,6 @@ export default function LiveMonitoring() {
             setAccessMessage(` Vehicle ${plate} detected - Status: ${vehicleRes.data.status}`);
             statusMessage = "Denied";
 
-            // Save alert for registered but not allowed
             await axios.post("http://localhost:5000/api/alerts", {
               vehicle: plate,
               message: `Vehicle ${plate} detected - Status: ${vehicleRes.data.status}`,
@@ -232,11 +239,9 @@ export default function LiveMonitoring() {
           });
         }
       } catch (err) {
-        // Vehicle not found → unregistered
         console.log("Vehicle not found:", plate);
         setAccessMessage(` Vehicle ${plate} not registered - Access Denied`);
 
-        // Save alert for unregistered vehicle
         await axios.post("http://localhost:5000/api/alerts", {
           vehicle: plate,
           message: `Unregistered vehicle detected: ${plate}`,

@@ -154,21 +154,31 @@ router.get("/my-vehicles", authMiddleware, async (req, res) => {
 //  GET /api/vehicles/plate/:plate
 //  Public route to get vehicle by plate number
 // =============================
-router.get("/plate/:plate", async (req, res) => {
+// GET /api/plates/:plate
+router.get("/:plate", async (req, res) => {
   try {
-    const plate = req.params.plate.toUpperCase().trim();
+    // 1️⃣ Normalize input plate
+    let plateRaw = req.params.plate.toUpperCase().replace(/[^A-Z0-9]/g, ""); 
+    if (plateRaw.length < 6) return res.status(400).json({ message: "Invalid plate format" });
 
-    const vehicle = await Vehicle.findOne({ plateNumber: plate })
-      .populate("user", "name email");
+    const plateRegexStr = `^${plateRaw.slice(0, 3)}[- ]?${plateRaw.slice(3, 6)}$`;
+    const plateRegex = new RegExp(plateRegexStr, "i"); // case-insensitive
 
-    if (!vehicle) return res.status(404).json(null);
+    // 2️⃣ Search vehicle in DB
+      const vehicle = await Vehicle.findOne({ plateNumber: { $regex: plateRegex } })
+                             .populate("user", "name phone email");
 
-    const vehicleWithOwner = { ...vehicle._doc, ownerName: vehicle.user?.name || "Unknown" };
-    res.json(vehicleWithOwner);
+
+    if (!vehicle) {
+      return res.status(404).json({ message: "Vehicle not found" });
+    }
+
+    res.json(vehicle);
   } catch (err) {
-    console.error("Error fetching vehicle by plate:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error("Error fetching vehicle:", err);
+    res.status(500).json({ message: "Server error" });
   }
 });
+
 
 module.exports = router;

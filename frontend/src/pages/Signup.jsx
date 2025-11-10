@@ -255,7 +255,7 @@ try {
   const data = await res.json();
 
   if (res.ok) {
-    alert(data.message);
+    // alert(data.message);
     navigate("/login");
   } else {
     alert(data.message || "Signup failed");
