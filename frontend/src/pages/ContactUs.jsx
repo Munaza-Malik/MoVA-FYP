@@ -14,6 +14,8 @@ export default function ContactUs() {
   });
 
   const [loading, setLoading] = useState(false);
+    const [submitError, setSubmitError] = useState("");     
+  const [submitSuccess, setSubmitSuccess] = useState("");
 
   // Fetch user profile to autofill name/email
   useEffect(() => {
@@ -47,36 +49,49 @@ export default function ContactUs() {
   };
 
   // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSubmitError("");
+  setSubmitSuccess("");
 
-    if (!form.subject || !form.message) {
-      alert("⚠ Please fill out all required fields.");
-      return;
+  if (!form.subject || !form.message) {
+    setSubmitError("⚠ Please fill out all required fields.");
+    return;
+  }
+
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  if (!token) {
+    setSubmitError("❌ You must be logged in to send a message.");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch("http://localhost:5000/api/contact", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`, // ✅ Include the token here
+      },
+      body: JSON.stringify(form),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      setSubmitSuccess("✅ Message sent successfully!");
+      setForm((prev) => ({ ...prev, subject: "", message: "" }));
+      setTimeout(() => navigate("/user-dashboard"), 2000);
+    } else {
+      setSubmitError(data.error || "❌ Failed to send message");
     }
+  } catch (err) {
+    console.error("Error submitting form:", err);
+    setSubmitError("❌ Server error. Please try again later.");
+  } finally {
+    setLoading(false);
+  }
+};
 
-    setLoading(true);
-    try {
-      const res = await fetch("http://localhost:5000/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        // Navigate to user dashboard
-        navigate("/user-dashboard");
-      } else {
-        alert("❌ " + (data.error || "Failed to send message"));
-      }
-    } catch (err) {
-      console.error("Error submitting form:", err);
-      alert("❌ Server error. Please try again later.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] p-10">

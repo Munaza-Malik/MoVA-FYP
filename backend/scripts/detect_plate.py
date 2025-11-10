@@ -1,4 +1,4 @@
-# backend/detectPlate.py
+# backend/detect_plate.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ultralytics import YOLO
@@ -6,160 +6,107 @@ import easyocr
 import cv2
 import numpy as np
 import base64
-import sqlite3
 import re
 
 app = Flask(__name__)
 CORS(app)
 
-# ====== Load models ======
-model = YOLO("../models/best.pt")  # Your YOLO number plate detection model
-ocr_reader = easyocr.Reader(["en"])
+# -----------------------------
+# Load YOLO model and EasyOCR
+# -----------------------------
+model = YOLO("../models/best.pt")
+ocr_reader = easyocr.Reader(['en'], gpu=False)  # Set gpu=True if you have CUDA
 
-# ====== Database helper ======
-DB_PATH = "vehicles.db"  # SQLite database
+# -----------------------------
+# Plate preprocessing function
+# -----------------------------
+def preprocess_plate(plate_img):
+    # Convert to grayscale
+    gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
+    
+    # Resize for better OCR accuracy
+    scale = 2
+    gray = cv2.resize(gray, (plate_img.shape[1]*scale, plate_img.shape[0]*scale))
+    
+    # Reduce noise while keeping edges
+    blur = cv2.bilateralFilter(gray, 9, 75, 75)
+    
+    # Adaptive threshold to get binary image
+    thresh = cv2.adaptiveThreshold(
+        blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15
+    )
+    
+    # Morphological close to fill gaps
+    kernel = np.ones((3, 3), np.uint8)
+    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+    
+    return cleaned
 
-def check_plate_in_db(plate_text):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM vehicles WHERE plate=?", (plate_text,))
-        result = cursor.fetchone()
-        conn.close()
-        return result  # None if not found
-    except Exception as e:
-        print("DB error:", e)
-        return None
+# -----------------------------
+# Clean OCR text
+# -----------------------------
+def clean_plate_text(text):
+    text = re.sub(r'[^A-Z0-9]', '', text.upper())
+    if len(text) >= 5:
+        # Ensure pattern ABC-123
+        letters = text[:3]
+        digits = text[3:6]
+        return f"{letters}-{digits}"
+    return ""
 
-# ====== Home ======
+
+# -----------------------------
+# Routes
+# -----------------------------
 @app.route('/')
 def home():
-    return " YOLOv8 + OCR + DB API is running!"
+    return "YOLO + OCR API running"
 
-# ====== Detect license plate safely ======
 @app.route('/detect', methods=['POST'])
 def detect():
-    try:
-        data = request.get_json()
-        image_data = data.get("image")
-        if not image_data:
-            return jsonify({"error": "No image provided"}), 400
+    data = request.get_json()
+    image_data = data.get('image')
+    if not image_data:
+        return jsonify({'error': 'No image provided'}), 400
 
-        # Decode base64 → OpenCV image
-        if "," in image_data:
-            img_bytes = base64.b64decode(image_data.split(",")[1])
-        else:
-            img_bytes = base64.b64decode(image_data)
-        np_arr = np.frombuffer(img_bytes, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        if frame is None:
-            return jsonify({"error": "Invalid image"}), 400
+    # Decode base64 image
+    img_bytes = base64.b64decode(image_data.split(",")[1] if "," in image_data else image_data)
+    frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        return jsonify({'error': 'Invalid image'}), 400
 
-        # Run YOLO detection
-        results = model(frame)
+    results = model(frame)
+    plates = []
+    plate_images = []
 
-        plate_numbers = []
-        plate_images = []
-        matched = False
-        vehicle_info = {}
-
-        # Loop over YOLO detections
-        for r in results:
-            try:
-                boxes = r.boxes.xyxy.cpu().numpy()
-                for (x1, y1, x2, y2) in boxes:
-                    # Crop plate
-                    plate = frame[int(y1):int(y2), int(x1):int(x2)]
-                    if plate.size == 0:
-                        continue
-
-                    # Optional: remove top 15-20% where province/city name usually is
-                    height = plate.shape[0]
-                    plate_number_area = plate[int(height*0.2):, :]
-
-                    # OCR read
-                    try:
-                        text_list = ocr_reader.readtext(plate_number_area, detail=0)
-                        if not text_list:
-                            continue
-                        raw_text = "".join(text_list).replace(" ", "").upper()
-
-                        # Keep only letters A-Z and numbers 0-9 (ignore "ICT", "Punjab", etc.)
-                        numbers_only = re.findall(r'[A-Z0-9]+', raw_text)
-                        if not numbers_only:
-                            continue
-                        plate_number = numbers_only[0]  # take the first valid sequence
-                        plate_numbers.append(plate_number)
-
-                        # Convert cropped plate to base64
-                        _, buffer = cv2.imencode(".jpg", plate)
-                        plate_base64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode()
-                        plate_images.append(plate_base64)
-
-                        # Check DB
-                        db_result = check_plate_in_db(plate_number)
-                        if db_result and not matched:  # Only take first matched vehicle
-                            matched = True
-                            vehicle_info = {"owner": db_result[1], "type": db_result[2]}
-
-                    except Exception as e:
-                        print("OCR or DB processing error:", e)
-                        continue
-
-            except Exception as e:
-                print("YOLO result processing error:", e)
+    for r in results:
+        boxes = r.boxes.xyxy.cpu().numpy()
+        for (x1, y1, x2, y2) in boxes:
+            plate_img = frame[int(y1):int(y2), int(x1):int(x2)]
+            if plate_img.size == 0:
                 continue
 
-        return jsonify({
-            "plates": plate_numbers,
-            "plate_images": plate_images,
-            "match": matched,
-            "vehicle_info": vehicle_info
-        })
+            processed = preprocess_plate(plate_img)
+            text_results = ocr_reader.readtext(processed, detail=0)
+            if not text_results:
+                continue
 
-    except Exception as e:
-        print("Unexpected error in /detect:", e)
-        return jsonify({"error": str(e)}), 500
+            raw_text = "".join(text_results)
+            plate_number = clean_plate_text(raw_text)
+            if not plate_number:
+                continue
 
-# ====== Save log route ======
-@app.route("/api/logs", methods=["POST"])
-def save_log():
-    try:
-        data = request.get_json()
-        plate = data.get("plate")
-        status = data.get("status")  # "Entry" or "Exit"
-        user = data.get("user", "Unknown")  # optional, default "Unknown"
+            plates.append(plate_number)
 
-        if not plate or not status:
-            return jsonify({"error": "Missing required fields"}), 400
+            # Encode plate image as base64 for frontend preview
+            _, buffer = cv2.imencode(".jpg", plate_img)
+            plate_base64 = "data:image/jpeg;base64," + base64.b64encode(buffer).decode()
+            plate_images.append(plate_base64)
 
-        # Ensure logs table exists
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user TEXT,
-                plate TEXT,
-                status TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+    return jsonify({'plates': plates, 'plate_images': plate_images})
 
-        # Insert the log
-        cursor.execute(
-            "INSERT INTO logs (user, plate, status) VALUES (?, ?, ?)",
-            (user, plate, status)
-        )
-        conn.commit()
-        conn.close()
-
-        return jsonify({"success": True, "message": "Log saved successfully"})
-
-    except Exception as e:
-        print("Error saving log:", e)
-        return jsonify({"error": str(e)}), 500
-
-
+# -----------------------------
+# Main
+# -----------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

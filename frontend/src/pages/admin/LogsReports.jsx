@@ -13,11 +13,18 @@ export default function LogsReports() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch logs from backend
+  // Fetch logs from backend (protected route)
   useEffect(() => {
     async function fetchLogs() {
       try {
-        const response = await axios.get("http://localhost:5000/api/logs");
+        const token = localStorage.getItem("token"); // ✅ get token
+
+        const response = await axios.get("http://localhost:5000/api/logs", {
+          headers: {
+            Authorization: `Bearer ${token}`, // ✅ send token
+          },
+        });
+
         const validLogs = response.data.filter(
           (log) => log.user && log.vehicle && log.status
         );
@@ -62,20 +69,34 @@ export default function LogsReports() {
     document.body.removeChild(link);
   };
 
-  // Delete a single log
+  // Delete a single log (protected + admin)
   const deleteLog = async (id) => {
     try {
-      await axios.delete(`http://localhost:5000/api/logs/${id}`);
+      const token = localStorage.getItem("token"); // ✅ get token
+
+      await axios.delete(`http://localhost:5000/api/logs/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`, // ✅ send token
+        },
+      });
+
       setLogs(logs.filter((log) => log._id !== id));
     } catch (err) {
       console.error("Failed to delete log:", err);
     }
   };
 
-  // Delete all logs
+  // Delete all logs (protected + admin)
   const deleteAllLogs = async () => {
     try {
-      await axios.delete("http://localhost:5000/api/logs");
+      const token = localStorage.getItem("token"); // ✅ get token
+
+      await axios.delete("http://localhost:5000/api/logs", {
+        headers: {
+          Authorization: `Bearer ${token}`, // ✅ send token
+        },
+      });
+
       setLogs([]);
     } catch (err) {
       console.error("Failed to delete all logs:", err);
@@ -141,16 +162,15 @@ export default function LogsReports() {
                   <td className="py-3 px-4">{log.user}</td>
                   <td className="py-3 px-4">{log.vehicle}</td>
                   <td className="py-3 px-4">
-                   {new Date(log.time).toLocaleString("en-GB", {
-                     day: "2-digit",
-                     month: "2-digit",
-                     year: "numeric",
-                     hour: "2-digit",
-                     minute: "2-digit",
-                     second: "2-digit",
-                   })}
+                    {new Date(log.time).toLocaleString("en-GB", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
                   </td>
-
                   <td className="py-3 px-4 flex items-center gap-2 font-semibold">
                     {log.status === "Entry" ? (
                       <>

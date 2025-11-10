@@ -20,7 +20,7 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 // POST /api/logs → Protected route
-router.post("/", authMiddleware, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const { user, vehicle, status } = req.body;
     const log = new Log({
