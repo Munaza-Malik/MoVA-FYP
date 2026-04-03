@@ -42,9 +42,9 @@ router.post(
         });
       }
 
-      const documents = req.files?.documents?.map((f) => f.path) || [];
-      const profileImages = req.files?.profileImages?.map((f) => f.path) || [];
-      const driverImages = req.files?.driverImages?.map((f) => f.path) || [];
+      const documents = req.files?.documents?.map((f) => f.path.replace(/\\/g, "/")) || [];
+      const profileImages = req.files?.profileImages?.map((f) => f.path.replace(/\\/g, "/")) || [];
+      const driverImages = req.files?.driverImages?.map((f) => f.path.replace(/\\/g, "/")) || [];
 
       const driverNamesArr = Array.isArray(driverNames) ? driverNames : driverNames ? [driverNames] : [];
       const cnicsArr = Array.isArray(cnics) ? cnics : cnics ? [cnics] : [];
@@ -68,7 +68,7 @@ router.post(
         drivers,
         profileImages,
         documents,
-        status: "Pending",
+        status: "Pending", // Default status is Pending
       });
 
       await newVehicle.save();
@@ -151,26 +151,27 @@ router.get("/my-vehicles", authMiddleware, async (req, res) => {
 });
 
 // =============================
-//  GET /api/vehicles/plate/:plate
-//  Public route to get vehicle by plate number
+//  GET /api/vehicles/:plate
+//  Used by Flask for Plate Verification
 // =============================
-// GET /api/plates/:plate
 router.get("/:plate", async (req, res) => {
   try {
     // 1️⃣ Normalize input plate
     let plateRaw = req.params.plate.toUpperCase().replace(/[^A-Z0-9]/g, ""); 
-    if (plateRaw.length < 6) return res.status(400).json({ message: "Invalid plate format" });
+    if (plateRaw.length < 5) return res.status(400).json({ message: "Invalid plate format" });
 
     const plateRegexStr = `^${plateRaw.slice(0, 3)}[- ]?${plateRaw.slice(3, 6)}$`;
-    const plateRegex = new RegExp(plateRegexStr, "i"); // case-insensitive
+    const plateRegex = new RegExp(plateRegexStr, "i");
 
-    // 2️⃣ Search vehicle in DB
-      const vehicle = await Vehicle.findOne({ plateNumber: { $regex: plateRegex } })
-                             .populate("user", "name phone email");
-
+    // 2️⃣ Search vehicle in DB - STATUS APPROVED CHECK ADDED HERE
+    const vehicle = await Vehicle.findOne({ 
+        plateNumber: { $regex: plateRegex },
+        status: "Approved" // Sirf approved vehicles ko access milega
+    }).populate("user", "name phone email");
 
     if (!vehicle) {
-      return res.status(404).json({ message: "Vehicle not found" });
+      // Agar vehicle nahi mila ya status Approved nahi hai
+      return res.status(404).json({ message: "Vehicle not found or not approved" });
     }
 
     res.json(vehicle);
@@ -179,6 +180,5 @@ router.get("/:plate", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 module.exports = router;

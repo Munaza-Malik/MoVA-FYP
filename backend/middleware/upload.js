@@ -3,51 +3,46 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// Ensure uploads folder exists
+// Folders Structure
 const uploadDir = "uploads";
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+const driverDir = path.join(uploadDir, "driver_images"); 
+const docDir = path.join(uploadDir, "documents");
 
-// Storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + "-" + file.originalname;
-    cb(null, uniqueName);
-  },
+// Auto-create folders
+[uploadDir, driverDir, docDir].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
 });
 
-// File filter (supports vehicle images and documents)
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        // Driver ki images ko alag folder mein rakhna hai verification ke liye
+        if (file.fieldname === "driverImages" || file.fieldname === "profileImages") {
+            cb(null, driverDir);
+        } else {
+            cb(null, docDir);
+        }
+    },
+    filename: (req, file, cb) => {
+        // Naming: Plate-Field-Time.jpg (Easy to search for Python)
+        const plate = req.body.plateNumber ? req.body.plateNumber.replace(/[^a-zA-Z0-9]/g, "") : "unknown";
+        const uniqueSuffix = Date.now();
+        cb(null, `${plate}-${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+    },
+});
+
 const fileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|pdf|doc|docx/;
-  const ext = path.extname(file.originalname).toLowerCase();
-
-  if (!allowed.test(ext)) {
-    return cb(
-      new Error(
-        "Only images (jpg, png) and documents (pdf, doc, docx) are allowed"
-      ),
-      false
-    );
-  }
-
-  // Allow all valid vehicle-related fields
-  const validFields = [
-    "profileImage", // for Signup.jsx
-    "profileImages", // for VehicleRegistration.jsx
-    "documents",
-    "cnicImage",
-    "vehicleImage",
-    "driverImages",
-  ];
-
-  if (validFields.includes(file.fieldname)) {
+    const allowed = /jpeg|jpg|png|pdf|doc|docx/;
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowed.test(ext)) {
+        return cb(new Error("File type not supported"), false);
+    }
     cb(null, true);
-  } else {
-    cb(new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname));
-  }
 };
 
-// Export multer instance
-module.exports = multer({ storage, fileFilter });
+module.exports = multer({ 
+    storage, 
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
