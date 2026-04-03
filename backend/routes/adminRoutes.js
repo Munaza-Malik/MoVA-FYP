@@ -4,8 +4,10 @@ const User = require("../models/User");
 const Vehicle = require("../models/Vehicle");
 const Log = require("../models/Log");
 
-// GET /api/admin/stats - No auth middleware
-router.get("/stats", async (req, res) => {
+const authMiddleware = require("../middleware/authMiddleware");
+
+// GET /api/admin/stats 
+router.get("/stats", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     // Count total users
     const totalUsers = await User.countDocuments();

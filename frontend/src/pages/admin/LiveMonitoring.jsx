@@ -12,11 +12,14 @@ export default function LiveMonitoring() {
   const [zoom, setZoom] = useState(1);
   const [zoomSupported, setZoomSupported] = useState(false);
   const [detectedPlates, setDetectedPlates] = useState([]);
-  const [previewImage, setPreviewImage] = useState(null);
+  
+  // ✅ Nayi States Face + Plate recognition ke liye
+  const [detectionCrops, setDetectionCrops] = useState([]); 
   const [plateText, setPlateText] = useState("");
   const [accessMessage, setAccessMessage] = useState("");
+  const [authStatus, setAuthStatus] = useState(""); 
 
-  // Enumerate cameras
+  // Camera Devices fetch karna (Aapka original logic)
   useEffect(() => {
     async function fetchDevices() {
       try {
@@ -40,13 +43,11 @@ export default function LiveMonitoring() {
     fetchDevices();
   }, [selectedDeviceId]);
 
-  // Start camera when selectedDeviceId changes
   useEffect(() => {
     startCamera(selectedDeviceId);
     return () => stopCamera();
   }, [selectedDeviceId]);
 
-  // Camera functions
   async function startCamera(deviceId = null) {
     stopCamera();
     setError("");
@@ -94,6 +95,7 @@ export default function LiveMonitoring() {
     stopAutoDetection();
   }
 
+  // Zoom Logic (Aapka original logic)
   async function handleZoomChange(value) {
     setZoom(value);
     const stream = mediaStreamRef.current;
@@ -116,7 +118,7 @@ export default function LiveMonitoring() {
     setSelectedDeviceId(e.target.value);
   }
 
-  // Plate detection
+  // Motion Detection Logic (Aapka original logic)
   let prevFrameData = null;
   let isDetecting = false;
   let lastDetectionTime = 0;
@@ -134,9 +136,7 @@ export default function LiveMonitoring() {
     let frameData;
     try {
       frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } catch {
-      return;
-    }
+    } catch { return; }
 
     if (prevFrameData) {
       let diff = 0;
@@ -154,15 +154,15 @@ export default function LiveMonitoring() {
       if (diff > MOTION_THRESHOLD && !isDetecting && now - lastDetectionTime > COOLDOWN_MS) {
         isDetecting = true;
         lastDetectionTime = now;
-        await detectPlate();
+        await detectEverything(); // Updated Function Name
         isDetecting = false;
       }
     }
-
     prevFrameData = frameData;
   }
 
-  async function detectPlate() {
+  // ✅ MAIN DETECTION: Ab isme Face aur Plate dono handle honge
+  async function detectEverything() {
     if (!videoRef.current || videoRef.current.videoWidth === 0) return;
 
     const canvas = document.createElement("canvas");
@@ -174,7 +174,8 @@ export default function LiveMonitoring() {
     const base64Image = canvas.toDataURL("image/jpeg");
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/detect", {
+      // 1. Python AI Server ko image bhejna
+      const response = await fetch("http://127.0.0.1:8000/detect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64Image }),
@@ -182,77 +183,42 @@ export default function LiveMonitoring() {
 
       const result = await response.json();
 
-      if (!result.plates || result.plates.length === 0) {
-        setDetectedPlates([]);
-        setPlateText("");
-        setPreviewImage(null);
-        setError("No plate detected");
-        setAccessMessage("");
-        return;
-      }
-
-      // ✅ Update with plates from Flask
-      setDetectedPlates(result.plates);
-      setPlateText(result.plates.join(" | "));
-      setPreviewImage(result.plate_images?.[0] || null);
+      // UI update karna
+      setDetectionCrops(result.plate_images || []); // Isme Face aur Plate crops hain
+      setDetectedPlates(result.plates || []);
+      setPlateText(result.plate || "Unknown");
+      setAccessMessage(result.message);
+      setAuthStatus(result.status);
       setError("");
 
-      let plate = "";
-      // Normalize plate
-let plateRaw = result.plates[0].replace(/\s/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-if (plateRaw.length >= 6) {
-    plate = plateRaw.slice(0, 3) + "-" + plateRaw.slice(3, 6);
-}
-
-
-console.log("Normalized Plate:", plate);
-
-
-      console.log("Plate detected:", plate);
-
-      try {
-        const vehicleRes = await axios.get(`http://localhost:5000/api/plates/${plate}`);
-
-
-        if (vehicleRes.data) {
-          let statusMessage = "";
-          if (vehicleRes.data.status === "Approved") {
-            setAccessMessage(` Authenticated User: ${vehicleRes.data.user?.name || "Unknown"} - Access Allowed`);
-            statusMessage = "Entry";
-          } else {
-            setAccessMessage(` Vehicle ${plate} detected - Status: ${vehicleRes.data.status}`);
-            statusMessage = "Denied";
-
-            await axios.post("http://localhost:5000/api/alerts", {
-              vehicle: plate,
-              message: `Vehicle ${plate} detected - Status: ${vehicleRes.data.status}`,
-              type: "Warning",
-              time: new Date().toISOString(),
-            });
-          }
-
+      // 2. Node.js Database (Port 5000) mein log entry karna
+      // Backend (Python) ne jo 'result' diya hai ussi ko use karke log save karein
+      if (result.status === "SUCCESS" || result.plate !== "Unknown") {
+        try {
           await axios.post("http://localhost:5000/api/logs", {
-            user: vehicleRes.data.user?.name || "Unknown",
-            vehicle: plate,
-            status: statusMessage,
+            user: result.driver || "Unknown", // Python backend driver name dega
+            vehicle: result.plate,
+            status: result.status === "SUCCESS" ? "Entry" : "Denied",
             time: new Date().toISOString(),
           });
+          
+          // Agar access denied hai toh alert bhi bhej dein
+          if (result.status !== "SUCCESS") {
+            await axios.post("http://localhost:5000/api/alerts", {
+                vehicle: result.plate,
+                message: result.message,
+                type: "Critical",
+                time: new Date().toISOString(),
+            });
+          }
+        } catch (dbErr) {
+          console.error("Database Logging Error:", dbErr);
         }
-      } catch (err) {
-        console.log("Vehicle not found:", plate);
-        setAccessMessage(` Vehicle ${plate} not registered - Access Denied`);
-
-        await axios.post("http://localhost:5000/api/alerts", {
-          vehicle: plate,
-          message: `Unregistered vehicle detected: ${plate}`,
-          type: "Critical",
-          time: new Date().toISOString(),
-        });
       }
+
     } catch (err) {
-      console.error("Error detecting plate:", err);
-      setError("Failed to detect plate or connect to backend.");
-      setAccessMessage("");
+      console.error("Error during detection:", err);
+      setError("Connection Error: Check if Python server is running on Port 8000");
     }
   }
 
@@ -273,8 +239,8 @@ console.log("Normalized Plate:", plate);
       <h1 className="text-5xl font-extrabold mb-10 text-center drop-shadow-md">Live Monitoring</h1>
 
       <div className="flex justify-center items-start gap-6 w-full max-w-6xl">
-        {/* Live Camera */}
-        <div className="relative w-[70%] h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-[#A6C76C]/40 bg-gradient-to-br from-[#A6C76C]/20 via-white/80 to-[#96B85C]/10">
+        {/* VIDEO FEED BOX */}
+        <div className="relative w-[70%] h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-[#A6C76C]/40 bg-black">
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover rounded-3xl" />
           <div className="absolute top-4 right-4 flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/30">
             <span className="w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
@@ -288,14 +254,28 @@ console.log("Normalized Plate:", plate);
           )}
         </div>
 
-        {/* Plate Preview */}
-        {(previewImage || plateText) && (
+        {/* SIDE PANEL: Ab isme Face aur Plate dono dikhenge */}
+        {(detectionCrops.length > 0 || plateText) && (
           <div className="w-[28%] bg-white/90 backdrop-blur-md border border-gray-300 shadow-xl rounded-xl p-4 text-center">
-            <h3 className="text-sm font-bold text-[#1A2B49] mb-2">Detected Plate</h3>
-            {previewImage && <img src={previewImage} alt="Detected Plate" className="w-full h-32 object-contain rounded-md border border-gray-400 mb-2" />}
-            {plateText && <p className="font-mono text-lg text-[#1A2B49] tracking-wider">{plateText}</p>}
+            <h3 className="text-sm font-bold text-[#1A2B49] mb-4">Live Detections</h3>
+            
+            <div className="flex flex-col gap-4">
+                {detectionCrops.map((crop, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                        <img src={crop} alt={`Detection ${index}`} className="w-full h-32 object-contain bg-gray-50" />
+                        <p className="text-[10px] bg-gray-100 py-1 font-bold uppercase">
+                            {index === 0 ? "Driver Face" : "Vehicle Plate"}
+                        </p>
+                    </div>
+                ))}
+            </div>
+
+            {plateText && <p className="font-mono text-xl mt-4 text-[#1A2B49] tracking-widest border-t pt-2">{plateText}</p>}
+            
             {accessMessage && (
-              <div className={`mt-4 p-3 rounded-lg font-semibold text-white text-center ${accessMessage.includes("Allowed") ? "bg-green-600" : "bg-red-600"}`}>
+              <div className={`mt-4 p-3 rounded-lg font-semibold text-white text-center shadow-md transition-all ${
+                authStatus === "SUCCESS" ? "bg-green-600" : "bg-red-600"
+              }`}>
                 {accessMessage}
               </div>
             )}
@@ -303,35 +283,33 @@ console.log("Normalized Plate:", plate);
         )}
       </div>
 
-      {/* Controls */}
-      <div className="w-full max-w-5xl mt-8 flex flex-wrap gap-3 items-center">
-        <select value={selectedDeviceId ?? ""} onChange={handleDeviceSelect} className="px-3 py-2 rounded-md border">
+      {/* CONTROLS AREA */}
+      <div className="w-full max-w-5xl mt-8 flex flex-wrap gap-4 items-center justify-center bg-white/50 p-6 rounded-2xl backdrop-blur-sm">
+        <select value={selectedDeviceId ?? ""} onChange={handleDeviceSelect} className="px-4 py-2 rounded-xl border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-[#A6C76C] outline-none">
           <option value="">Default Camera</option>
           {devices.map((d) => (
             <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${d.deviceId}`}</option>
           ))}
         </select>
 
-        <button onClick={() => startCamera(selectedDeviceId)} className="bg-[#A6C76C] px-4 py-2 rounded-full text-white">Restart Camera</button>
-        <button onClick={stopCamera} className="bg-[#FFA500] px-4 py-2 rounded-full text-white">Stop Camera</button>
+        <button onClick={() => startCamera(selectedDeviceId)} className="bg-[#A6C76C] hover:bg-[#96B85C] px-6 py-2 rounded-full text-white font-bold transition-all shadow-md">Restart Camera</button>
+        <button onClick={stopCamera} className="bg-[#FFA500] hover:bg-[#e69500] px-6 py-2 rounded-full text-white font-bold transition-all shadow-md">Stop Camera</button>
 
-        {/* Zoom control */}
-        <div className="flex items-center gap-4 mt-4">
-          <label className="font-medium">Zoom</label>
+        <div className="flex items-center gap-4">
+          <label className="font-bold text-sm text-gray-600">ZOOM</label>
           <input
             type="range"
             min={1}
-            max={zoomSupported ? zoom + 4 : 2}
+            max={zoomSupported ? 5 : 2}
             step="0.1"
             value={zoom}
             onChange={(e) => handleZoomChange(Number(e.target.value))}
-            className="w-64"
+            className="w-48 accent-[#A6C76C]"
             disabled={!mediaStreamRef.current}
           />
-          {!zoomSupported && <small className="text-xs text-gray-500">Zoom not supported; CSS scale fallback used.</small>}
         </div>
 
-        {error && <p className="text-red-600 mt-3">{error}</p>}
+        {error && <p className="w-full text-center text-red-600 mt-3 font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
       </div>
     </div>
   );
