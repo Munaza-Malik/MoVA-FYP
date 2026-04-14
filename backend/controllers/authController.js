@@ -141,21 +141,24 @@ exports.login = async (req, res) => {
 exports.sendOtp = async (req, res) => {
   try {
     const { email } = req.body;
+    console.log("Looking for user:", email); // ADD THIS
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+       console.log("User not found in DB");
+       return res.status(404).json({ message: "User not found" });
+    }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore[email] = { otp, expires: Date.now() + 5 * 60 * 1000 }; // 5 minutes expiry
+    otpStore[email] = { otp, expires: Date.now() + 5 * 60 * 1000 };
 
+    console.log("Attempting to send email..."); // ADD THIS
     await sendEmail(email, "Your OTP Code", `Your OTP is: ${otp}`);
 
     res.json({ message: "OTP sent to your email" });
   } catch (err) {
-    console.error(" Send OTP error:", err.response?.body || err);
-    res
-      .status(500)
-      .json({ message: "Error sending OTP", error: err.message });
+    console.error("FULL ERROR DETAIL:", err); // This will tell you if SendGrid failed
+    res.status(500).json({ message: "Error sending OTP", error: err.message });
   }
 };
 

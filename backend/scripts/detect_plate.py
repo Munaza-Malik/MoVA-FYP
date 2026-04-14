@@ -9,22 +9,24 @@ import base64
 import re
 import os
 import requests
-import threading # Teacher ki requirement ke liye
+import threading
 
 app = Flask(__name__)
 CORS(app)
 
 # -----------------------------
-# LOAD MODELS
+# 1. CONFIG & MODELS
 # -----------------------------
+# Use absolute paths to avoid confusion
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FACE_DB = os.path.join(BASE_DIR, "../uploads/driver_images")
+
 plate_model = YOLO("../models/plate_model.pt") 
 face_model = YOLO("../models/face_model.pt") 
 ocr_reader = easyocr.Reader(['en'], gpu=False)
 
-FACE_DB = "../uploads/driver_images"
-
 # -----------------------------
-# HELPERS
+# 2. HELPERS
 # -----------------------------
 def get_base64_crop(img):
     _, buffer = cv2.imencode(".jpg", img)
@@ -34,139 +36,108 @@ def preprocess_plate(plate_img):
     gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, (plate_img.shape[1]*2, plate_img.shape[0]*2))
     blur = cv2.bilateralFilter(gray, 9, 75, 75)
-    thresh = cv2.adaptiveThreshold(
-        blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15
-    )
+    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15)
     return thresh
 
 def clean_plate_text(text):
     text = re.sub(r'[^A-Z0-9]', '', text.upper())
-    if len(text) >= 5:
-        return f"{text[:3]}-{text[3:6]}"
-    return text
+    return f"{text[:3]}-{text[3:6]}" if len(text) >= 5 else text
 
 def recognize_face_identity(face_img):
-    if not os.path.exists(FACE_DB):
-        return None
+    if not os.path.exists(FACE_DB): 
+        return "Unknown", 0
     try:
-        dfs = DeepFace.find(img_path=face_img, db_path=FACE_DB, enforce_detection=False, silent=True)
+        # We use 'cosine' and 'VGG-Face' for best compatibility
+        dfs = DeepFace.find(
+            img_path=face_img, 
+            db_path=FACE_DB, 
+            enforce_detection=False, 
+            silent=True, 
+            distance_metric='cosine',
+            model_name='VGG-Face'
+        )
+        
         if len(dfs) > 0 and not dfs[0].empty:
-            matched_path = dfs[0].iloc[0]['identity']
-            driver_name = os.path.basename(os.path.dirname(matched_path))
-            return driver_name
+            match = dfs[0].iloc[0]
+            dist = match['distance']
+            
+            # Threshold Check: Lower distance = Higher similarity
+            if dist < 0.65: 
+                # Extract filename from the identity path
+                full_path = os.path.normpath(match['identity'])
+                file_name = os.path.basename(full_path) # e.g., "Munaza_1771.jpg"
+                
+                # Clean the name: Remove the timestamp and extension
+                # This takes everything before the first hyphen or underscore
+                clean_name = re.split(r'[-_]', file_name)[0] 
+                
+                accuracy = round((1 - dist) * 100, 2)
+                return clean_name.upper(), accuracy # Returns "MUNAZA"
+                
     except Exception as e:
-        print(f"DeepFace Match Error: {e}")
-    return None
+        print(f"Match Error: {e}")
+        
+    return "Unknown", 0
 
 # -----------------------------
-# THREAD WORKERS
+# 3. THREAD WORKERS
 # -----------------------------
-def face_worker(frame, results_container):
-    """Worker thread for Face Detection and Recognition"""
-    face_results = face_model(frame, verbose=False)
-    for r in face_results:
+def face_worker(frame, res):
+    results = face_model(frame, verbose=False)
+    for r in results:
         for box in r.boxes.xyxy.cpu().numpy():
             x1, y1, x2, y2 = map(int, box)
-            face_crop = frame[y1:y2, x1:x2]
-            if face_crop.size > 0:
-                results_container['face_crop_b64'] = get_base64_crop(face_crop)
-                results_container['driver_name'] = recognize_face_identity(face_crop)
-                return # Pehla face milte hi khatam
+            crop = frame[y1:y2, x1:x2]
+            if crop.size > 0:
+                res['face_crop'] = get_base64_crop(crop)
+                res['driver_name'], res['confidence'] = recognize_face_identity(crop)
+                return
 
-def plate_worker(frame, results_container):
-    """Worker thread for Plate Detection and OCR"""
-    plate_results = plate_model(frame, verbose=False)
-    for r in plate_results:
+def plate_worker(frame, res):
+    results = plate_model(frame, verbose=False)
+    for r in results:
         for box in r.boxes.xyxy.cpu().numpy():
             x1, y1, x2, y2 = map(int, box)
-            plate_img = frame[y1:y2, x1:x2]
-            if plate_img.size > 0:
-                results_container['plate_crop_b64'] = get_base64_crop(plate_img)
-                processed = preprocess_plate(plate_img)
-                text_results = ocr_reader.readtext(processed, detail=0)
-                if text_results:
-                    results_container['plate_text'] = clean_plate_text("".join(text_results))
-                return # Pehli plate milte hi khatam
+            crop = frame[y1:y2, x1:x2]
+            if crop.size > 0:
+                res['plate_crop'] = get_base64_crop(crop)
+                txt = ocr_reader.readtext(preprocess_plate(crop), detail=0)
+                if txt: res['plate_text'] = clean_plate_text("".join(txt))
+                return
 
 # -----------------------------
-# MAIN ROUTE
+# 4. API ROUTE
 # -----------------------------
 @app.route('/detect', methods=['POST'])
 def detect():
     data = request.get_json()
-    image_data = data.get('image')
-
-    if not image_data:
-        return jsonify({'error': 'No image provided'}), 400
-
-    img_bytes = base64.b64decode(image_data.split(",")[1] if "," in image_data else image_data)
+    img_bytes = base64.b64decode(data['image'].split(",")[1])
     frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-
-    if frame is None:
-        return jsonify({'error': 'Invalid image'}), 400
-
-    # Threading container to hold results
-    results = {
-        'driver_name': None,
-        'face_crop_b64': None,
-        'plate_text': None,
-        'plate_crop_b64': None
-    }
-
-    # STEP 1 & 2: Launch Threads Parallelly (Teacher's Technique)
-    t_face = threading.Thread(target=face_worker, args=(frame, results))
-    t_plate = threading.Thread(target=plate_worker, args=(frame, results))
-
-    t_face.start()
-    t_plate.start()
-
-    t_face.join() # Wait for both to finish
-    t_plate.join()
-
-    # Extracting results from threads
-    recognized_driver = results['driver_name']
-    final_plate = results['plate_text']
     
-    crop_images = []
-    if results['face_crop_b64']: crop_images.append(results['face_crop_b64'])
-    if results['plate_crop_b64']: crop_images.append(results['plate_crop_b64'])
+    results = {'driver_name': "Unknown", 'face_crop': None, 'plate_text': None, 'plate_crop': None, 'confidence': 0}
+    
+    t1 = threading.Thread(target=face_worker, args=(frame, results))
+    t2 = threading.Thread(target=plate_worker, args=(frame, results))
+    t1.start(); t2.start(); t1.join(); t2.join()
 
-    # STEP 3: SECURITY LOGIC (Same as before)
-    auth_status = "DENIED"
-    display_message = "Access Denied: Identity Unknown"
-    detected_plates = [final_plate] if final_plate else []
-
-    if final_plate:
-        try:
-            res = requests.get(f"http://localhost:5000/api/plates/{final_plate}")
-            if res.status_code == 200:
-                if recognized_driver:
-                    auth_status = "SUCCESS"
-                    display_message = f"Fully Authenticated: {recognized_driver} ({final_plate})"
-                else:
-                    display_message = f"Plate {final_plate} OK but Face Not Recognized"
-            else:
-                if recognized_driver:
-                    auth_status = "SUCCESS"
-                    display_message = f"Authorized Driver: {recognized_driver} (Vehicle {final_plate} Not Registered)"
-                else:
-                    display_message = f"Vehicle {final_plate} Unknown & Face Not Found"
-        except:
-            display_message = "Database Connection Error"
-    else:
-        if recognized_driver:
-            auth_status = "SUCCESS"
-            display_message = f"Authorized Driver: {recognized_driver} (Plate Not Detected)"
+    # Logic decision
+    status, msg = "DENIED", "Identity Not Verified"
+    
+    if results['driver_name'] != "Unknown":
+        if results['plate_text']:
+            status, msg = "SUCCESS", f"Authorized: {results['driver_name']} ({results['plate_text']})"
         else:
-            display_message = "Access Denied: No Plate or Face Detected"
+            status, msg = "SUCCESS", f"Authorized: {results['driver_name']} (No Plate)"
+    elif results['plate_text']:
+        msg = f"Unknown Driver in Vehicle {results['plate_text']}"
 
     return jsonify({
-        "status": auth_status,
-        "message": display_message,
-        "plates": detected_plates,
-        "plate_images": crop_images,
-        "plate": final_plate or "Unknown",
-        "driver": recognized_driver or "Unknown"
+        "status": status,
+        "message": msg,
+        "plate": results['plate_text'] or "Unknown",
+        "driver": results['driver_name'],
+        "confidence": results['confidence'],
+        "crops": {"face": results['face_crop'], "plate": results['plate_crop']}
     })
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ export default function LogsReports() {
         });
 
         const validLogs = response.data.filter(
-          (log) => log.user && log.vehicle && log.status
+          (log) => (log.driverName || log.user) && log.vehicle && log.status
         );
         setLogs(validLogs);
       } catch (err) {
@@ -40,19 +40,21 @@ export default function LogsReports() {
   }, []);
 
   // Filter logs
-  const filteredLogs = logs.filter(
-    (log) =>
-      log.user.toLowerCase().includes(search.toLowerCase()) ||
-      log.vehicle.toLowerCase().includes(search.toLowerCase()) ||
-      log.status.toLowerCase().includes(search.toLowerCase())
+const filteredLogs = logs.filter((log) => {
+  const nameToSearch = log.driverName || log.user || "";
+  return (
+    nameToSearch.toLowerCase().includes(search.toLowerCase()) ||
+    log.vehicle.toLowerCase().includes(search.toLowerCase()) ||
+    log.status.toLowerCase().includes(search.toLowerCase())
   );
+});
 
   // Export logs to CSV
   const exportCSV = () => {
     const header = ["#", "User", "Vehicle", "Time", "Status"];
     const rows = filteredLogs.map((log, index) => [
       index + 1,
-      log.user,
+      log.driverName || log.user,
       log.vehicle,
       log.time,
       log.status,
@@ -159,7 +161,7 @@ export default function LogsReports() {
                   className="border-b border-[#A6C76C]/20 hover:bg-[#A6C76C]/10 transition-all"
                 >
                   <td className="py-3 px-4">{index + 1}</td>
-                  <td className="py-3 px-4">{log.user}</td>
+                  <td className="py-3 px-4">{log.driverName || log.user}</td>
                   <td className="py-3 px-4">{log.vehicle}</td>
                   <td className="py-3 px-4">
                     {new Date(log.time).toLocaleString("en-GB", {
