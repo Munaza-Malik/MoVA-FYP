@@ -6,7 +6,7 @@ const Vehicle = require("../models/Vehicle");
  */
 exports.registerVehicle = async (req, res) => {
   try {
-    const { phone, plateNumber, vehicleType, brand, model, color } = req.body;
+    const { phone, plateNumber, vehicleType, brand, model, color, driverNames } = req.body;
 
     //  Validate required fields
     if (!phone || !plateNumber || !vehicleType) {
@@ -37,17 +37,25 @@ exports.registerVehicle = async (req, res) => {
     //  Handle uploaded files (multer)
     const documents = req.files?.map((file) => file.filename) || [];
 
+    const driversArray = [{
+      name: driverNames,
+      cnic: cnic || "00000-0000000-0", // Agar frontend se CNIC nahi aa raha to placeholder
+      phone: phone
+    }];
+
     //  Create new vehicle
-    const newVehicle = new Vehicle({
-      user: userId,
-      phone,
-      plateNumber: normalizedPlate,
-      vehicleType,
-      brand,
-      model,
-      color,
-      documents,
-    });
+// Create new vehicle
+const newVehicle = new Vehicle({
+  user: userId,
+  phone,
+  plateNumber: normalizedPlate,
+  vehicleType,
+  brand,
+  model,
+  color,
+  documents,
+  drivers: driversArray, // Add this line to save the name to the DB
+});
 
     await newVehicle.save();
 

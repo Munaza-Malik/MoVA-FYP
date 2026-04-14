@@ -45,10 +45,13 @@ export default function AdminDashboard() {
 
   // Fetch stats (public) & recent activity/alerts (requires auth)
   useEffect(() => {
+    if (!token) return;
     const fetchDashboard = async () => {
       try {
-        // Stats
-        const statsRes = await axios.get("http://localhost:5000/api/admin/stats");
+// Stats
+const statsRes = await axios.get("http://localhost:5000/api/admin/stats", {
+  headers: { Authorization: `Bearer ${token}` },
+});
         setStats(statsRes.data);
 
         if (token) {
@@ -56,9 +59,10 @@ export default function AdminDashboard() {
           const logsRes = await axios.get("http://localhost:5000/api/logs", {
             headers: { Authorization: `Bearer ${token}` },
           });
-          const entryLogs = logsRes.data
-            .filter((log) => log.status === "Entry")
-            .sort((a, b) => new Date(b.time) - new Date(a.time));
+const entryLogs = logsRes.data
+  .filter((log) => log.status === "Approved" || log.status === "Denied")
+  .sort((a, b) => new Date(b.time) - new Date(a.time)) // Sort by newest first
+  .slice(0, 5); // Then take the top 5
           setRecentActivity(entryLogs);
 
           // Alerts

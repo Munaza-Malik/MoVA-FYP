@@ -190,15 +190,15 @@ driverDetails.forEach((driver, index) => {
     data.append("driverNames", driver.name);
     data.append("cnics", driver.cnic || "");
     data.append("driverPhones", driver.phone || "");
-
-    if (formData.driverImages[index]) {
-      data.append("driverImages", formData.driverImages[index]);
-    }
   }
 });
 
 
-
+driverDetails.forEach((driver, index) => {
+    if (driver.name.trim() !== "" && formData.driverImages[index]) {
+      data.append("driverImages", formData.driverImages[index]);
+    }
+  });
 
 
   // Append documents
