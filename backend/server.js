@@ -11,6 +11,11 @@ const authRoutes = require("./routes/authRoutes");
 const vehicleRoutes = require("./routes/vehicleRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const userRoutes = require("./routes/userRoutes");
+const plateRoutes = require("./routes/plateRoutes");
+const logsRoutes = require("./routes/logsRoutes");
+const alertRoutes = require("./routes/alertRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+
 
 // Initialize app
 const app = express();
@@ -26,10 +31,13 @@ connectDB();
 app.use("/api/auth", authRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/contact", contactRoutes);
-app.use("/api/logs", require("./routes/logRoutes"));
 app.use("/api/users", userRoutes); 
 
 app.use("/uploads", express.static("uploads"));
+app.use("/api/plates", plateRoutes);
+app.use("/api/logs", logsRoutes);
+app.use("/api/alerts", alertRoutes);
+app.use("/api/admin", adminRoutes);
 
 
 // Default Route

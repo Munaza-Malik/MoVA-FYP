@@ -1,14 +1,53 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import axios from "axios";
 import { FaBell, FaTimes } from "react-icons/fa";
 
 export default function Alerts() {
-  const [alerts, setAlerts] = useState([
-    { id: 1, message: "Unauthorized vehicle detected!", time: "9:40 AM", type: "Critical" },
-    { id: 2, message: "Suspicious entry attempt!", time: "12:15 PM", type: "Warning" },
-  ]);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const dismissAlert = (id) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  // ✅ Improved Auth header with check
+  const getAuthConfig = () => {
+    const token = localStorage.getItem("token");
+    if (!token) return null; // Don't send request if no token
+    return {
+      headers: { Authorization: `Bearer ${token}` },
+    };
+  };
+
+  const fetchAlerts = useCallback(async () => {
+    const config = getAuthConfig();
+    if (!config) {
+      console.warn("No auth token found, skipping fetch.");
+      return;
+    }
+
+    try {
+      const res = await axios.get("http://localhost:5000/api/alerts", config);
+      // Sort by newest first
+      setAlerts(res.data.sort((a, b) => new Date(b.time) - new Date(a.time)));
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load alerts:", err.response?.status === 401 ? "Unauthorized" : err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+    // Poll every 5 seconds for new security alerts
+    const interval = setInterval(fetchAlerts, 5000);
+    return () => clearInterval(interval);
+  }, [fetchAlerts]);
+
+  const dismissAlert = async (id) => {
+    const config = getAuthConfig();
+    try {
+      await axios.delete(`http://localhost:5000/api/alerts/${id}`, config);
+      // Optimistic UI update: remove from local state immediately
+      setAlerts(prev => prev.filter(alert => alert._id !== id));
+    } catch (err) {
+      console.error("Failed to dismiss alert:", err);
+    }
   };
 
   const typeColor = {
@@ -18,41 +57,40 @@ export default function Alerts() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] px-6 py-10 flex flex-col items-center transition-all">
-      {/* Page Heading */}
-      <h1 className="text-4xl font-extrabold mb-10 text-[#1A2B49] text-center">
-        Alerts & Notifications
-      </h1>
+    <div className="min-h-screen bg-gradient-to-br from-[#F9FAFB] via-white to-[#ECF3E8] text-[#1A2B49] px-6 py-10 flex flex-col items-center">
+      <header className="mb-10 text-center">
+        <h1 className="text-4xl font-extrabold text-slate-800">Alerts & Notifications</h1>
+        <p className="text-slate-500 mt-2">Real-time security monitoring system</p>
+      </header>
 
-      {/* Alerts List */}
-      <div className="space-y-6 w-full max-w-4xl">
+      <div className="space-y-4 w-full max-w-4xl">
         {alerts.map((a) => (
           <div
-            key={a.id}
-            className="flex items-center justify-between bg-white border border-[#A6C76C]/30 p-5 rounded-2xl shadow-md hover:shadow-lg transform transition duration-300 hover:scale-[1.01]"
+            key={a._id}
+            className="flex items-center justify-between bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all"
           >
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-[#A6C76C]/10 rounded-full">
-                <FaBell className="text-[#A6C76C]" size={22} />
+            <div className="flex items-center space-x-4">
+              <div className={`p-3 rounded-full ${a.type === 'Critical' ? 'bg-red-50' : 'bg-indigo-50'}`}>
+                <FaBell className={a.type === 'Critical' ? 'text-red-500' : 'text-indigo-500'} size={20} />
               </div>
               <div>
-                <p className="font-semibold text-[#1A2B49]">{a.message}</p>
-                <p className="text-sm text-[#1A2B49]/60">{a.time}</p>
+                <p className="font-bold text-slate-700">{a.message}</p>
+                <div className="flex gap-3 mt-1">
+                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                    {new Date(a.time).toLocaleString()}
+                  </span>
+                  {a.vehicle && <span className="text-[10px] font-black text-indigo-500 uppercase">Vehicle: {a.vehicle}</span>}
+                </div>
               </div>
             </div>
 
             <div className="flex items-center space-x-3">
-              {/* Type Badge */}
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${typeColor[a.type]}`}
-              >
+              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${typeColor[a.type] || typeColor.Info}`}>
                 {a.type}
               </span>
-
-              {/* Dismiss Button */}
               <button
-                onClick={() => dismissAlert(a.id)}
-                className="text-[#1A2B49]/50 hover:text-red-500 transition"
+                onClick={() => dismissAlert(a._id)}
+                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
               >
                 <FaTimes />
               </button>
@@ -60,19 +98,12 @@ export default function Alerts() {
           </div>
         ))}
 
-        {/* No Alerts Message */}
-        {alerts.length === 0 && (
-          <div className="text-center mt-6 bg-white border border-[#A6C76C]/30 rounded-2xl shadow p-6">
-            <p className="text-[#1A2B49]/70 text-lg font-medium">
-              No active alerts — all systems running smoothly 
-            </p>
+        {!loading && alerts.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
+            <div className="text-4xl mb-3">✅</div>
+            <p className="text-slate-500 font-medium">No active security alerts</p>
           </div>
         )}
-      </div>
-
-      {/* Subtle Footer Note */}
-      <div className="mt-8 px-6 py-3 rounded-xl bg-white/80 backdrop-blur-md text-[#1A2B49]/70 text-center max-w-md shadow-sm border border-[#A6C76C]/20">
-        Stay informed with real-time security alerts.
       </div>
     </div>
   );

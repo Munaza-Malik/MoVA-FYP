@@ -207,7 +207,7 @@ export default function Home() {
         <div className="flex flex-col items-center bg-[#F5F7FA] rounded-xl shadow-md p-6 hover:shadow-lg transition">
           <div className="text-[#F79F1F] text-4xl mb-3">📧</div>
           <h3 className="font-bold text-lg text-[#1A2B49] mb-1">Email Us</h3>
-          <p className="text-gray-600">support@mova.ai</p>
+          <p className="text-gray-600">mova.webservices@gmail.com</p>
         </div>
 
         {/* Phone */}

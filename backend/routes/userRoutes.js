@@ -1,11 +1,16 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 const User = require("../models/User");
+const upload = require("../middleware/upload"); // Multer config
+const authMiddleware = require("../middleware/authMiddleware"); // <- added
+
 const router = express.Router();
 
-// Get all users 
-router.get("/", async (req, res) => {
+// ===== GET all users =====
+// Only authenticated users can view users
+router.get("/", authMiddleware, async (req, res) => {
   try {
-    const users = await User.find().select("-password"); // Exclude password
+    const users = await User.find().select("-password"); // exclude password
     res.status(200).json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -13,23 +18,58 @@ router.get("/", async (req, res) => {
   }
 });
 
-//  Add new user
-router.post("/", async (req, res) => {
-  const { name, email, userType, role, password } = req.body;
-
-  if (!name || !email || !role || !password) {
-    return res.status(400).json({ message: "Please provide all required fields" });
-  }
-
+// ===== ADD new user =====
+// Only admin can add a new user
+router.post("/", authMiddleware, authMiddleware.requireAdmin, upload.single("profileImage"), async (req, res) => {
   try {
-    // Check if email already exists
+    const {
+      name,
+      email,
+      userType,
+      role,
+      password,
+      faculty,
+      programType,
+      semester,
+      batch,
+      year,
+      phone,
+      sapId,
+    } = req.body;
+
+    if (!name || !email || !role || !password) {
+      return res.status(400).json({ message: "Please provide all required fields" });
+    }
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
     }
 
-    const newUser = new User({ name, email, userType, role, password });
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUserData = {
+      name,
+      email,
+      userType,
+      role,
+      password: hashedPassword,
+      faculty: faculty || null,
+      programType: programType || null,
+      semester: semester || null,
+      batch: batch || null,
+      year: year || null,
+      phone: phone || null,
+      sapId: sapId || null,
+    };
+
+    if (req.file) {
+      newUserData.profileImage = req.file.path.replace(/\\/g, "/");
+    }
+
+    const newUser = new User(newUserData);
     const savedUser = await newUser.save();
+
     const { password: _, ...userWithoutPassword } = savedUser.toObject();
     res.status(201).json(userWithoutPassword);
   } catch (error) {
@@ -38,15 +78,26 @@ router.post("/", async (req, res) => {
   }
 });
 
-//  Update user
-router.put("/:id", async (req, res) => {
-  const { name, email, userType } = req.body;
-
+// ===== UPDATE user =====
+// Only admin can update users
+router.put("/:id", authMiddleware, authMiddleware.requireAdmin, upload.single("profileImage"), async (req, res) => {
   try {
+    const updateData = { ...req.body };
+
+    if (updateData.password) {
+      updateData.password = await bcrypt.hash(updateData.password, 10);
+    } else {
+      delete updateData.password;
+    }
+
+    if (req.file) {
+      updateData.profileImage = req.file.path.replace(/\\/g, "/");
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { name, email, userType },
-      { new: true }
+      updateData,
+      { new: true, runValidators: true }
     ).select("-password");
 
     if (!updatedUser) {
@@ -60,8 +111,9 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-//  Delete user
-router.delete("/:id", async (req, res) => {
+// ===== DELETE user =====
+// Only admin can delete users
+router.delete("/:id", authMiddleware, authMiddleware.requireAdmin, async (req, res) => {
   try {
     const deletedUser = await User.findByIdAndDelete(req.params.id);
     if (!deletedUser) {
