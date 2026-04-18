@@ -31,7 +31,7 @@ export default function Logs() {
     fetchData();
   }, []);
 
-  // 🔍 Filter vehicles by search input
+  //  Filter vehicles
   const filteredVehicles = vehicles.filter(
     (v) =>
       v.plateNumber?.toLowerCase().includes(search.toLowerCase()) ||
