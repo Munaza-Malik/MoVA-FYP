@@ -10,7 +10,7 @@ import {
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import logo from "../assets/logo.png"; // ✅ MoVA Logo
+import logo from "../assets/logo.png"; //  MoVA Logo
 import { FaCog } from "react-icons/fa";
 
 export default function UserDashboard() {
@@ -23,7 +23,7 @@ export default function UserDashboard() {
     reportsGenerated: 0,
   });
 
-  // ✅ Fetch user profile
+  //  Fetch user profile
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -44,7 +44,7 @@ export default function UserDashboard() {
     fetchProfile();
   }, [navigate]);
 
-  // ✅ Fetch dashboard stats
+  //  Fetch dashboard stats
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -131,7 +131,7 @@ const sidebarItems = [
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Header (✅ Search removed) */}
+        {/* Header ( Search removed) */}
 <header className="flex items-center justify-end bg-[#A6C76C]/20 backdrop-blur-md px-6 py-4 shadow-md border-b border-[#A6C76C]/30">
   <div className="flex items-center space-x-4">
     {user?.profileImage ? (
@@ -153,7 +153,7 @@ const sidebarItems = [
 
         {/* Main Dashboard */}
         <main className="flex-1 p-10 overflow-y-auto bg-white/80 backdrop-blur-lg">
-          {/* ✅ Welcome Banner */}
+          {/*  Welcome Banner */}
           <div className="bg-gradient-to-r from-[#A6C76C] to-[#96B85C] rounded-3xl p-10 text-white shadow-lg mb-10 relative overflow-hidden">
             <div className="relative z-10">
               <h1 className="text-3xl font-bold mb-3 drop-shadow-md">
@@ -168,7 +168,7 @@ const sidebarItems = [
             <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent"></div>
           </div>
 
-          {/* ✅ Stats Section */}
+          {/*  Stats Section */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="bg-white text-gray-800 p-6 rounded-xl shadow-md text-center hover:shadow-2xl transform hover:-translate-y-1 transition-all">
               <h2 className="text-2xl font-bold text-teal-700">

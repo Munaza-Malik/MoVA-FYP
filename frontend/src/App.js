@@ -15,7 +15,7 @@ import Logs from "./pages/Logs";
 import AboutUs from "./pages/AboutUs";
 import ContactUs from "./pages/ContactUs";
 
-// ✅ Admin pages
+//  Admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ManageUsers from "./pages/admin/ManageUsers";
 import ManageVehicles from "./pages/admin/ManageVehicles";

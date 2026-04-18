@@ -11,8 +11,8 @@ export default function Header() {
     localStorage.removeItem("token");
     sessionStorage.removeItem("token");
 
-    // ✅ Redirect to Home.jsx
-    navigate("/");   // make sure App.js me bhi path="/home" diya ho
+    //  Redirect to Home.jsx
+    navigate("/");   
   };
 
   return (

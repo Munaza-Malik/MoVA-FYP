@@ -10,7 +10,7 @@ import {
   FaVideo,
 } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png"; // ✅ MoVA Logo
+import logo from "../assets/logo.png"; //  MoVA Logo
 
 export default function AdminSidebar() {
   const navigate = useNavigate();
@@ -32,7 +32,7 @@ export default function AdminSidebar() {
 
   return (
     <aside className="w-64 bg-[#A6C76C] text-[#1A2B49] flex flex-col shadow-2xl">
-      {/* ✅ Logo + Title Section */}
+      {/*  Logo + Title Section */}
       <div className="p-6 text-center border-b border-white/30">
         <img
           src={logo}
@@ -44,7 +44,7 @@ export default function AdminSidebar() {
         </h1>
       </div>
 
-      {/* ✅ Navigation Menu */}
+      {/*  Navigation Menu */}
       <nav className="flex-1 p-4 space-y-2">
         {menuItems.map((item, index) => (
           <Link
@@ -59,7 +59,7 @@ export default function AdminSidebar() {
         ))}
       </nav>
 
-      {/* ✅ Logout Button */}
+      {/*  Logout Button */}
       <div className="p-4 border-t border-white/30">
         <button
           onClick={handleLogout}

@@ -81,7 +81,7 @@ export default function VehicleRegistration() {
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  // 🔹 Handle Form Submission
+  //  Handle Form Submission
 const handleSubmit = async (e) => {
   e.preventDefault();
 
@@ -119,7 +119,7 @@ const handleSubmit = async (e) => {
     const token =
       localStorage.getItem("token") || sessionStorage.getItem("token");
 
-    // ✅ POST request to backend to actually register vehicle
+    //  POST request to backend to actually register vehicle
     const response = await axios.post(
       "http://localhost:5000/api/vehicles/register",
       data,
