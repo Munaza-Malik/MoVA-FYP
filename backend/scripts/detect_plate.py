@@ -8,18 +8,23 @@ import numpy as np
 import base64
 import re
 import os
-import requests
 import threading
+from pymongo import MongoClient
 
 app = Flask(__name__)
 CORS(app)
 
 # -----------------------------
-# 1. CONFIG & MODELS
+# 1. CONFIG & DB CONNECTION
 # -----------------------------
-# Use absolute paths to avoid confusion
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FACE_DB = os.path.join(BASE_DIR, "../uploads/driver_images")
+
+# Update 'your_database_name' to your actual MongoDB database name
+client = MongoClient("mongodb://localhost:27017/")
+db = client['fypdb'] 
+users_col = db['users']
+vehicles_col = db['vehicles']
 
 plate_model = YOLO("../models/plate_model.pt") 
 face_model = YOLO("../models/face_model.pt") 
@@ -40,14 +45,30 @@ def preprocess_plate(plate_img):
     return thresh
 
 def clean_plate_text(text):
-    text = re.sub(r'[^A-Z0-9]', '', text.upper())
-    return f"{text[:3]}-{text[3:6]}" if len(text) >= 5 else text
+    if not text: return None
+    
+    # 1. Standardize: Uppercase and remove non-alphanumeric
+    clean = re.sub(r'[^A-Z0-9]', '', text.upper())
+    
+    # 2. Pattern Matching for Islamabad style (e.g., AB 123 or ABC 123)
+    # This look for 2-3 letters followed by 3-4 digits
+    match = re.search(r'([A-Z]{2,3})(\d{3,4})', clean)
+    
+    if match:
+        # Returns format like "DV 595"
+        return f"{match.group(1)} {match.group(2)}"
+    
+    # 3. Fallback: If no specific pattern, just return the alphanumeric string 
+    # but filter out long strings that look like "ISLAMABAD"
+    if len(clean) > 8: 
+        return None
+        
+    return clean
 
 def recognize_face_identity(face_img):
     if not os.path.exists(FACE_DB): 
         return "Unknown", 0
     try:
-        # We use 'cosine' and 'VGG-Face' for best compatibility
         dfs = DeepFace.find(
             img_path=face_img, 
             db_path=FACE_DB, 
@@ -60,23 +81,14 @@ def recognize_face_identity(face_img):
         if len(dfs) > 0 and not dfs[0].empty:
             match = dfs[0].iloc[0]
             dist = match['distance']
-            
-            # Threshold Check: Lower distance = Higher similarity
             if dist < 0.65: 
-                # Extract filename from the identity path
                 full_path = os.path.normpath(match['identity'])
-                file_name = os.path.basename(full_path) # e.g., "Munaza_1771.jpg"
-                
-                # Clean the name: Remove the timestamp and extension
-                # This takes everything before the first hyphen or underscore
-                clean_name = re.split(r'[-_]', file_name)[0] 
-                
+                file_name = os.path.basename(full_path)
+                clean_name = re.split(r'[-_.]', file_name)[0] 
                 accuracy = round((1 - dist) * 100, 2)
-                return clean_name.upper(), accuracy # Returns "MUNAZA"
-                
+                return clean_name.upper(), accuracy 
     except Exception as e:
         print(f"Match Error: {e}")
-        
     return "Unknown", 0
 
 # -----------------------------
@@ -101,8 +113,16 @@ def plate_worker(frame, res):
             crop = frame[y1:y2, x1:x2]
             if crop.size > 0:
                 res['plate_crop'] = get_base64_crop(crop)
-                txt = ocr_reader.readtext(preprocess_plate(crop), detail=0)
-                if txt: res['plate_text'] = clean_plate_text("".join(txt))
+                
+                # Use detail=1 to get bounding boxes if you want to be even more precise,
+                # but for now, we filter the combined text.
+                detections = ocr_reader.readtext(preprocess_plate(crop), detail=0)
+                
+                combined_text = "".join(detections)
+                cleaned = clean_plate_text(combined_text)
+                
+                if cleaned:
+                    res['plate_text'] = cleaned
                 return
 
 # -----------------------------
@@ -120,22 +140,37 @@ def detect():
     t2 = threading.Thread(target=plate_worker, args=(frame, results))
     t1.start(); t2.start(); t1.join(); t2.join()
 
-    # Logic decision
-    status, msg = "DENIED", "Identity Not Verified"
-    
-    if results['driver_name'] != "Unknown":
-        if results['plate_text']:
-            status, msg = "SUCCESS", f"Authorized: {results['driver_name']} ({results['plate_text']})"
+    status = "DENIED"
+    driver = results['driver_name']
+    plate = results['plate_text']
+    msg = "Awaiting Verification"
+
+    if driver == "Unknown":
+        msg = "Denied: Face Not Matched"
+    elif not plate:
+        msg = "Denied: Plate Not Readable"
+    else:
+        # Cross-reference with MongoDB Ownership
+        user = users_col.find_one({"name": {"$regex": f"^{driver}", "$options": "i"}})
+        if user:
+            vehicle = vehicles_col.find_one({"user": user['_id']})
+            if vehicle:
+                reg_plate = clean_plate_text(vehicle['plateNumber'])
+                if plate == reg_plate:
+                    status = "SUCCESS"
+                    msg = f"Authorized: {user['name']} ({plate})"
+                else:
+                    msg = f"Alert: {user['name']} in Unauthorized Vehicle ({plate})"
+            else:
+                msg = f"Denied: No registered vehicle for {user['name']}"
         else:
-            status, msg = "SUCCESS", f"Authorized: {results['driver_name']} (No Plate)"
-    elif results['plate_text']:
-        msg = f"Unknown Driver in Vehicle {results['plate_text']}"
+            msg = f"Denied: User {driver} not found in database"
 
     return jsonify({
         "status": status,
         "message": msg,
-        "plate": results['plate_text'] or "Unknown",
-        "driver": results['driver_name'],
+        "plate": plate or "Unknown",
+        "driver": driver,
         "confidence": results['confidence'],
         "crops": {"face": results['face_crop'], "plate": results['plate_crop']}
     })
