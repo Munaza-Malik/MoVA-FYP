@@ -22,7 +22,7 @@ export default function AboutUs() {
           <span className="font-semibold text-[#A6C76C]">
             AI-Powered Multimodal Vehicle Access System (MoVA)
           </span>{" "}
-          — a next-generation solution designed to enhance{" "}
+          - a next-generation solution designed to enhance{" "}
           <span className="font-semibold">security</span>,{" "}
           <span className="font-semibold">reliability</span>, and{" "}
           <span className="font-semibold">efficiency</span> in vehicle access

@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import sideImage from "../assets/side-car.jpg"; // same as signup/login
-import logo from "../assets/logo.png"; // same logo
+import sideImage from "../assets/side-car.jpg";
+import logo from "../assets/logo.png";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -15,17 +15,38 @@ export default function ForgotPassword() {
     setLoading(true);
     setMessage("");
 
+    console.log("Attempting to send OTP to:", email); // Debug log
+
     try {
       const res = await axios.post(
         "http://localhost:5000/api/auth/forgot-password",
         { email }
       );
 
+      console.log("Server Response Success:", res.data);
       setMessage(res.data.message || "OTP sent to your email!");
-      navigate("/verify-otp", { state: { email } });
+      
+      // Navigate to verify page after a short delay so user can see success message
+      setTimeout(() => {
+        navigate("/verify-otp", { state: { email } });
+      }, 1500);
+
     } catch (error) {
-      setMessage(error.response?.data?.message || "Error sending OTP");
-      console.error("Forgot Password Error:", error);
+      // --- DETAILED ERROR LOGGING ---
+      if (error.response) {
+        // The server responded with a status code (400, 404, 500)
+        console.error("Backend Error Data:", error.response.data);
+        console.error("Backend Status Code:", error.response.status);
+        setMessage(error.response.data.message || "Error sending OTP");
+      } else if (error.request) {
+        // The request was made but no response was received (Server down)
+        console.error("No response received from server:", error.request);
+        setMessage("Server is not responding. Please check your connection.");
+      } else {
+        // Something happened in setting up the request
+        console.error("Request Setup Error:", error.message);
+        setMessage("Request failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -33,20 +54,15 @@ export default function ForgotPassword() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
-      {/* Background Image */}
       <img
         src={sideImage}
         alt="Background"
         className="absolute inset-0 w-full h-full object-cover object-[40%_center]"
       />
-
-      {/* Dark Overlay */}
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
 
-      {/* Centered Form */}
       <div className="relative z-10 flex justify-center items-center h-full">
         <div className="bg-white/95 shadow-2xl rounded-3xl px-10 py-8 w-[90%] max-w-md backdrop-blur-md">
-          {/* Logo & Heading */}
           <div className="flex flex-col items-center mb-6">
             <img src={logo} alt="MoVA Logo" className="w-16 mb-2" />
             <h2 className="text-[#1A2B49] text-3xl font-bold">MoVA</h2>
@@ -55,7 +71,6 @@ export default function ForgotPassword() {
             </p>
           </div>
 
-          {/* Heading */}
           <h1 className="text-2xl font-semibold text-center text-[#1A2B49] mb-2">
             Forgot Password?
           </h1>
@@ -63,14 +78,13 @@ export default function ForgotPassword() {
             Enter your registered email to receive an OTP.
           </p>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
               type="email"
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-none focus:outline-none focus:ring-2 focus:ring-[#A6C76C]"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6C76C]"
               required
             />
 
@@ -83,18 +97,17 @@ export default function ForgotPassword() {
             </button>
           </form>
 
-          {/* Message */}
           {message && (
-            <p className="mt-4 text-sm text-center text-gray-700">{message}</p>
+            <div className={`mt-4 p-3 rounded-lg text-sm text-center ${
+                message.includes("sent") ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            }`}>
+              {message}
+            </div>
           )}
 
-          {/* Login Link */}
           <p className="text-sm text-center mt-6 text-gray-600">
             Remembered your password?{" "}
-            <a
-              href="/login"
-              className="text-[#2B4C7E] font-semibold hover:underline"
-            >
+            <a href="/login" className="text-[#2B4C7E] font-semibold hover:underline">
               LOGIN HERE
             </a>
           </p>
